@@ -315,9 +315,10 @@ class FindReplaceDialog(tk.Toplevel):
 class GPTDictConverter:
     def __init__(self, root):
         self.root = root
-        self.version = "v1.0.0"  # <-- 定义版本号
-        self.root.title(f"GPT字典编辑转换器   {self.version}") # <-- 在标题中使用版本号
+        self.version = "v1.0.1"
+        self.root.title(f"GPT字典编辑转换器   {self.version}")
         self.root.geometry("800x600")
+        self.current_file_path = None
         
         self.format_names = {
             "AiNiee_JSON": "AiNiee/LinguaGacha JSON格式",
@@ -342,6 +343,7 @@ class GPTDictConverter:
         self.input_format = ttk.Combobox(main_frame, values=["自动检测"] + list(self.format_names.values()), state="readonly", width=25)
         self.input_format.set("自动检测")
         self.input_format.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 20))
+        self.input_format.bind("<<ComboboxSelected>>", self._on_input_format_change)
         
         ttk.Label(main_frame, text="输出格式:").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.output_format = ttk.Combobox(main_frame, values=list(self.format_names.values()), state="readonly", width=25)
@@ -352,7 +354,8 @@ class GPTDictConverter:
         button_frame.grid(row=0, column=2, rowspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5, padx=(20, 0))
         
         ttk.Button(button_frame, text="打开文件", command=self.open_file).pack(side=tk.TOP, fill=tk.X, pady=2)
-        ttk.Button(button_frame, text="保存输出内容到文件", command=self.save_file).pack(side=tk.TOP, fill=tk.X, pady=2)
+        ttk.Button(button_frame, text="保存输入内容", command=self.save_input_file).pack(side=tk.TOP, fill=tk.X, pady=2)
+        ttk.Button(button_frame, text="保存输出内容", command=self.save_file).pack(side=tk.TOP, fill=tk.X, pady=2)
         ttk.Button(button_frame, text="转换", command=self.convert).pack(side=tk.TOP, fill=tk.X, pady=2)
         ttk.Button(button_frame, text="清空", command=self.clear).pack(side=tk.TOP, fill=tk.X, pady=2)
         
@@ -385,6 +388,12 @@ class GPTDictConverter:
 
         self._setup_editor_features()
         
+    def _on_input_format_change(self, event=None):
+        """当手动更改输入格式时，重置文件路径以防意外覆盖。"""
+        if self.current_file_path:
+            self.current_file_path = None
+            self.status_var.set("输入格式已更改，文件关联已重置。")
+        
     def transfer_output_to_input(self):
         self.output_text.config(state=tk.NORMAL)
         output_content = self.output_text.get("1.0", tk.END).strip()
@@ -396,6 +405,7 @@ class GPTDictConverter:
         self.input_text.insert("1.0", output_content)
         current_output_format = self.output_format.get()
         self.input_format.set(current_output_format)
+        self.current_file_path = None
         self._update_all_highlights(self.input_text)
         self.status_var.set("已将输出传至输入，并同步格式。")
         
@@ -437,7 +447,7 @@ class GPTDictConverter:
         main_frame.pack(expand=True, fill=tk.BOTH)
 
         ttk.Label(main_frame, text="GPT字典编辑转换器", font=("", 12, "bold")).pack(pady=(0, 10))
-        ttk.Label(main_frame, text=f"版本: {self.version}").pack(pady=2) # <-- 在“关于”中使用版本号
+        ttk.Label(main_frame, text=f"版本: {self.version}").pack(pady=2)
         
         link_font = tkFont.Font(family="Helvetica", size=10, underline=True)
         
@@ -495,7 +505,9 @@ class GPTDictConverter:
            - 点击“转换”按钮，转换后的内容将显示在“输出内容”框中。
 
         5. 保存结果:
-           - 点击“保存输出内容到文件”按钮，将输出内容保存到新文件中。
+           - 点击“保存输出内容”按钮，将输出内容保存到新文件中。
+           - 点击“保存输入内容”按钮，可以直接覆盖保存已打开的文件，
+             或者将当前输入框的内容格式化后另存为新文件。
 
         -------------------------------------------------------------
 
@@ -902,13 +914,67 @@ class GPTDictConverter:
             self.input_text.delete("1.0", tk.END)
             self.input_text.insert("1.0", content)
             self.input_text.edit_reset()
+            self.current_file_path = file_path
             detected_format = self.detect_format(content)
-            if detected_format: self.input_format.set(detected_format)
+            if detected_format:
+                self.input_format.set(detected_format)
+            else:
+                self.input_format.set("自动检测") # 如果识别失败，重置为自动检测
             self.status_var.set(f"已打开文件: {os.path.basename(file_path)}")
             self._update_all_highlights(self.input_text)
         except Exception as e:
             messagebox.showerror("错误", f"打开文件失败: {str(e)}")
             
+    def save_input_file(self):
+        input_content = self.input_text.get("1.0", tk.END).strip()
+        if not input_content:
+            messagebox.showwarning("警告", "输入内容为空，无法保存")
+            return
+
+        if self.current_file_path:
+            if messagebox.askyesno(
+                "确认保存",
+                f"是否要覆盖现有文件？\n\n{self.current_file_path}",
+                parent=self.root
+            ):
+                try:
+                    # 使用 get("1.0", "end-1c") 来避免写入额外的换行符
+                    with open(self.current_file_path, 'w', encoding='utf-8') as f:
+                        f.write(self.input_text.get("1.0", "end-1c"))
+                    self.status_var.set(f"文件已覆盖保存: {os.path.basename(self.current_file_path)}")
+                except Exception as e:
+                    messagebox.showerror("错误", f"保存文件失败: {str(e)}")
+                    self.status_var.set("保存失败")
+        else:
+            original_input_format = self.input_format.get()
+            target_format = ""
+
+            if original_input_format == "自动检测":
+                detected_format = self.detect_format(input_content)
+                if not detected_format:
+                    messagebox.showerror("错误", "无法自动检测输入内容的格式，无法保存。请手动指定输入格式。", parent=self.root)
+                    return
+                target_format = detected_format
+                self.input_format.set(detected_format)
+            else:
+                target_format = original_input_format
+            
+            self.output_format.set(target_format)
+            self.convert()
+
+            # 如果原始选择是“自动检测”，转换后恢复，避免锁定到检测到的格式
+            if original_input_format == "自动检测":
+                self.input_format.set("自动检测")
+
+            self.output_text.config(state=tk.NORMAL)
+            output_for_saving = self.output_text.get("1.0", tk.END).strip()
+            self.output_text.config(state=tk.DISABLED)
+
+            if output_for_saving:
+                self.save_file() # 调用保存输出的函数，弹出另存为对话框
+            else:
+                self.status_var.set("转换后无内容可保存。")
+
     def save_file(self):
         self.output_text.config(state=tk.NORMAL)
         output_content = self.output_text.get("1.0", tk.END).strip()
@@ -925,21 +991,22 @@ class GPTDictConverter:
         }.get(format_key, ".txt")
         
         file_path = filedialog.asksaveasfilename(
-            title="保存输出内容到文件", defaultextension=default_ext,
+            title="保存输出内容", defaultextension=default_ext,
             filetypes=[(f"{output_format_display}", f"*{default_ext}"), ("所有文件", "*.*")]
         )
         if not file_path: return
         try:
             with open(file_path, 'w', encoding='utf-8') as f: f.write(output_content)
-            self.status_var.set(f"已保存输出内容到文件: {os.path.basename(file_path)}")
+            self.status_var.set(f"已保存输出内容: {os.path.basename(file_path)}")
         except Exception as e:
-            messagebox.showerror("错误", f"保存输出内容到文件失败: {str(e)}")
+            messagebox.showerror("错误", f"保存输出内容失败: {str(e)}")
             
     def clear(self):
         self.input_text.delete("1.0", tk.END)
         self.output_text.config(state=tk.NORMAL)
         self.output_text.delete("1.0", tk.END)
         self.output_text.config(state=tk.DISABLED)
+        self.current_file_path = None
         self.status_var.set("已清空")
 
 def main():
