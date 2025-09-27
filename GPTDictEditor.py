@@ -315,7 +315,7 @@ class FindReplaceDialog(tk.Toplevel):
 class GPTDictConverter:
     def __init__(self, root):
         self.root = root
-        self.version = "v1.0.1"
+        self.version = "v1.0.2"
         self.root.title(f"GPT字典编辑转换器   {self.version}")
         self.root.geometry("800x600")
         self.current_file_path = None
@@ -503,6 +503,8 @@ class GPTDictConverter:
 
         4. 执行转换:
            - 点击“转换”按钮，转换后的内容将显示在“输出内容”框中。
+           - 如果输入和输出格式相同（如 TSV->TSV），程序会格式化文件
+             并保留所有注释。
 
         5. 保存结果:
            - 点击“保存输出内容”按钮，将输出内容保存到新文件中。
@@ -878,11 +880,13 @@ class GPTDictConverter:
         
     def convert(self):
         try:
-            input_content = self.input_text.get("1.0", tk.END).strip()
-            if not input_content:
+            input_content = self.input_text.get("1.0", tk.END)
+            if not input_content.strip():
                 messagebox.showwarning("警告", "请输入要转换的内容")
                 return
+
             input_format, output_format = self.input_format.get(), self.output_format.get()
+            
             if input_format == "自动检测":
                 detected_format_display = self.detect_format(input_content)
                 if not detected_format_display:
@@ -890,18 +894,147 @@ class GPTDictConverter:
                 self.input_format.set(detected_format_display)
                 input_format = detected_format_display
 
-            data = self.parse_input(input_content, input_format)
-            output_key = self.get_format_key(output_format, display_name=True)
-            output_content = self.format_output(data, output_key)
+            # ### 新增逻辑: 如果输入输出格式相同，则执行保留注释的重新格式化 ###
+            format_key = self.get_format_key(input_format, display_name=True)
+            if input_format == output_format and format_key in ["GalTransl_TSV", "GPPGUI_TOML", "GPPCLI_TOML"]:
+                output_content = self._reformat_current_format(input_content, input_format)
+                status_msg = f"格式化完成: {input_format}"
+            else:
+                # ### 原有逻辑: 解析并转换为新格式 ###
+                data = self.parse_input(input_content, input_format)
+                output_key = self.get_format_key(output_format, display_name=True)
+                output_content = self.format_output(data, output_key)
+                status_msg = f"转换完成: {input_format} → {output_format}"
+
             self.output_text.config(state=tk.NORMAL)
             self.output_text.delete("1.0", tk.END)
             self.output_text.insert("1.0", output_content)
             self._update_all_highlights(self.output_text)
             self.output_text.config(state=tk.DISABLED)
-            self.status_var.set(f"转换完成: {input_format} → {output_format}")
+            self.status_var.set(status_msg)
+
         except Exception as e:
-            messagebox.showerror("错误", f"转换失败: {str(e)}")
-            self.status_var.set("转换失败")
+            messagebox.showerror("错误", f"处理失败: {str(e)}")
+            self.status_var.set("处理失败")
+
+    # #####################################################################
+    # 新增: 保留注释的重新格式化逻辑
+    # #####################################################################
+
+    def _reformat_current_format(self, content, format_display_name):
+        """根据格式，分派到具体的重新格式化函数。"""
+        format_key = self.get_format_key(format_display_name, display_name=True)
+        if format_key == "GalTransl_TSV":
+            return self._reformat_tsv(content)
+        if format_key == "GPPGUI_TOML":
+            return self._reformat_gppgui_toml(content)
+        if format_key == "GPPCLI_TOML":
+            return self._reformat_gppcli_toml(content)
+        return content
+
+    def _reformat_tsv(self, content):
+        """重新格式化TSV，保留注释和空行。"""
+        new_lines = []
+        for line in content.splitlines():
+            parsed = self.parse_tsv_line(line)
+            if parsed:
+                # 重新生成标准格式的数据行
+                new_line = f"{parsed['org']}\t{parsed['rep']}"
+                if parsed['note']:
+                    new_line += f"\t{parsed['note']}"
+                new_lines.append(new_line)
+            else:
+                # 保留非数据行（注释、空行等）
+                new_lines.append(line)
+        return "\n".join(new_lines)
+
+    def _extract_toml_val(self, text, key):
+        """从TOML片段中提取单引号字符串的值。"""
+        pattern = rf"{key}\s*=\s*'((?:[^']|'')*)'"
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1).replace("''", "'")
+        return None
+
+    def _reformat_gppgui_toml(self, content):
+        """重新格式化GPPGUI TOML，保留注释。"""
+        new_lines = []
+        for line in content.splitlines():
+            # 匹配包含字典条目的行，并捕获前后部分和注释
+            match = re.match(r'^(\s*)(\{.*?\})(\s*,?\s*)(#.*)?$', line)
+            if not match:
+                new_lines.append(line)
+                continue
+
+            leading_ws, entry_text, trailing_part, comment = match.groups()
+            comment = comment or ""
+
+            org = self._extract_toml_val(entry_text, 'org')
+            rep = self._extract_toml_val(entry_text, 'rep')
+            note = self._extract_toml_val(entry_text, 'note')
+
+            if org is not None and rep is not None and note is not None:
+                # 重新构建标准格式的条目
+                reformatted_entry = "{{ org = '{}', rep = '{}', note = '{}' }}".format(
+                    self.escape_toml_string_single(org),
+                    self.escape_toml_string_single(rep),
+                    self.escape_toml_string_single(note)
+                )
+                new_lines.append(f"{leading_ws}{reformatted_entry}{trailing_part}{comment}")
+            else:
+                # 如果解析失败，保留原行
+                new_lines.append(line)
+        return "\n".join(new_lines)
+
+    def _extract_toml_val_with_comment(self, line, key):
+        """从TOML行中提取值和行尾注释。"""
+        if line is None: return ('', '')
+        pattern = rf"^\s*{key}\s*=\s*'((?:[^']|'')*)'(\s*#.*)?\s*$"
+        match = re.match(pattern, line)
+        if match:
+            val_escaped, comment = match.groups()
+            val = val_escaped.replace("''", "'")
+            return val, (comment or "")
+        return ('', '') # 如果行不匹配，返回空
+
+    def _reformat_gppcli_toml(self, content):
+        """重新格式化GPPCLI TOML，保留注释和块内顺序。"""
+        # 使用正则表达式按[[gptDict]]块分割文本
+        blocks = re.split(r'(\n*\[\[gptDict\]\]\n)', content)
+        new_content = [blocks[0]] # 保留文件头
+
+        for i in range(1, len(blocks), 2):
+            marker = blocks[i]
+            block_content = blocks[i+1]
+            
+            note_line, rep_line, org_line = None, None, None
+            other_lines = []
+
+            for line in block_content.splitlines():
+                stripped = line.strip()
+                if stripped.startswith('note ='): note_line = line
+                elif stripped.startswith('replaceStr ='): rep_line = line
+                elif stripped.startswith('searchStr ='): org_line = line
+                else: other_lines.append(line)
+
+            note_val, note_comment = self._extract_toml_val_with_comment(note_line, 'note')
+            rep_val, rep_comment = self._extract_toml_val_with_comment(rep_line, 'replaceStr')
+            org_val, org_comment = self._extract_toml_val_with_comment(org_line, 'searchStr')
+
+            new_content.append(marker.strip())
+
+            # 写入重新格式化的行，保留行尾注释
+            new_content.append(f"note = '{self.escape_toml_string_single(note_val)}'{note_comment}")
+            new_content.append(f"replaceStr = '{self.escape_toml_string_single(rep_val)}'{rep_comment}")
+            new_content.append(f"searchStr = '{self.escape_toml_string_single(org_val)}'{org_comment}")
+            
+            # 附加块内其他行（如注释）
+            if other_lines:
+                new_content.extend(other_lines)
+
+        return "\n".join(new_content)
+
+    # #####################################################################
             
     def open_file(self):
         file_path = filedialog.askopenfilename(
@@ -977,7 +1110,7 @@ class GPTDictConverter:
 
     def save_file(self):
         self.output_text.config(state=tk.NORMAL)
-        output_content = self.output_text.get("1.0", tk.END).strip()
+        output_content = self.output_text.get("1.e", tk.END).strip()
         self.output_text.config(state=tk.DISABLED)
         if not output_content:
             messagebox.showwarning("警告", "没有内容可保存")
