@@ -23,6 +23,18 @@ except ImportError:
     )
     sys.exit(1)
 
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+except ImportError:
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror(
+        "缺少依赖",
+        "错误: 缺少 'tkinterdnd2' 包。\n此包用于实现拖放文件功能。\n\n请在命令行运行以下命令进行安装:\npip install tkinterdnd2"
+    )
+    sys.exit(1)
+
+
 # #####################################################################
 # 2. 导入其他必要的模块
 # #####################################################################
@@ -146,7 +158,7 @@ class FindReplaceDialog(tk.Toplevel):
     def __init__(self, master, target_widget, app_instance):
         super().__init__(master)
         self.transient(master)
-        self.title("查找与替换")
+        self.title("查找与替换（仅限输入框）")
         self.target = target_widget
         self.app = app_instance
         self.master = master
@@ -335,7 +347,7 @@ class GoToLineDialog(tk.Toplevel):
 class GPTDictConverter:
     def __init__(self, root):
         self.root = root
-        self.version = "v1.0.3"
+        self.version = "v1.0.4"
         self.root.title(f"GPT字典编辑转换器   {self.version}")
         self.root.geometry("1000x600")
         self.current_file_path = None
@@ -395,7 +407,7 @@ class GPTDictConverter:
         input_frame = ttk.Frame(content_frame)
         input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         
-        ttk.Label(input_frame, text="输入内容:").pack(anchor=tk.W, pady=5)
+        ttk.Label(input_frame, text="输入内容 (可拖入文件):").pack(anchor=tk.W, pady=5)
         self.input_text = EditorWithLineNumbers(
             input_frame,
             selectbackground="black", selectforeground="white",
@@ -403,6 +415,10 @@ class GPTDictConverter:
             highlightthickness=1, highlightbackground="#c0c0c0"
         )
         self.input_text.pack(expand=True, fill=tk.BOTH)
+        
+        # ### 新增: 注册拖放目标 ###
+        self.input_text.drop_target_register(DND_FILES)
+        self.input_text.dnd_bind('<<Drop>>', self.on_drop)
 
         transfer_frame = ttk.Frame(content_frame)
         transfer_frame.grid(row=0, column=1, sticky=tk.N)
@@ -535,6 +551,7 @@ class GPTDictConverter:
         1. 打开文件或粘贴内容:
            - 点击“打开文件”按钮选择一个 .json, .toml, 或 .txt 文件。
            - 或者直接将文本内容粘贴到“输入内容”框中。
+           - 直接将文件拖拽到“输入内容”框中来打开。
         
         2. 格式识别:
            - 程序会自动尝试识别输入内容的格式，并在“输入格式”下拉框中显示。
@@ -1037,9 +1054,19 @@ class GPTDictConverter:
             title="选择文件",
             filetypes=[("所有支持格式", "*.json;*.toml;*.txt"), ("所有文件", "*.*")]
         )
+        if file_path:
+            self._open_file_path(file_path)
+            
+    def on_drop(self, event):
+        # The event.data might be a string with spaces enclosed in curly braces
+        file_path = event.data.strip('{}')
+        self._open_file_path(file_path)
+
+    def _open_file_path(self, file_path):
         if not file_path: return
         try:
-            with open(file_path, 'r', encoding='utf-8-sig') as f: content = f.read()
+            with open(file_path, 'r', encoding='utf-8-sig') as f:
+                content = f.read()
             self.input_text.delete("1.0", tk.END)
             self.input_text.insert("1.0", content)
             self.input_text.edit_reset()
@@ -1053,7 +1080,7 @@ class GPTDictConverter:
             self._update_all_highlights(self.input_text)
         except Exception as e:
             messagebox.showerror("错误", f"打开文件失败: {str(e)}")
-            
+
     def save_input_file(self):
         input_content = self.input_text.get("1.0", tk.END).strip()
         if not input_content:
@@ -1137,7 +1164,8 @@ class GPTDictConverter:
         self.status_var.set("已清空")
 
 def main():
-    root = tk.Tk()
+    # ### 修改: 使用 TkinterDnD.Tk() 代替 tk.Tk() ###
+    root = TkinterDnD.Tk()
     app = GPTDictConverter(root)
     root.mainloop()
 

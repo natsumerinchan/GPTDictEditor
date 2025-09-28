@@ -10,7 +10,7 @@ GalTranslPP CLI TOML和GalTranslPP GUI TOML四种格式字典之间的相互转�
 ### 安装依赖
 
 ```cmd
-pip install toml tk
+pip install toml tk tkinterdnd2
 ```
 
 ### 基本流程
@@ -19,6 +19,7 @@ pip install toml tk
 
 - 点击“打开文件”按钮选择一个 .json, .toml, 或 .txt 文件。
 - 或者直接将文本内容粘贴到“输入内容”框中。
+- 直接将文件拖拽到“输入内容”框中来打开。
 
 2、 格式识别:
 
