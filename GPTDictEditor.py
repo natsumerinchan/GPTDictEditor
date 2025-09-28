@@ -45,10 +45,6 @@ class FindReplaceDialog(tk.Toplevel):
         self.app = app_instance
         self.master = master
 
-        self.matches = []
-        self.current_match_index = -1
-        self.last_find_options = None
-        
         self.match_len_var = tk.StringVar()
 
         self.create_widgets()
@@ -77,24 +73,6 @@ class FindReplaceDialog(tk.Toplevel):
         self.regex_var = tk.BooleanVar()
         ttk.Checkbutton(option_frame, text="正则表达式", variable=self.regex_var).pack(side=tk.LEFT, padx=5)
 
-        # 结构化/普通查找切换开关
-        self.structured_search_var = tk.BooleanVar(value=True)
-        # command=self.toggle_structured_options 联动启用/禁用下面的复选框
-        ttk.Checkbutton(option_frame, text="结构化查找替换", variable=self.structured_search_var, command=self.toggle_structured_options).pack(side=tk.LEFT, padx=20)
-        
-        # 结构化范围
-        self.struct_frame = ttk.LabelFrame(main_frame, text="结构化查找替换范围", padding="5")
-        self.struct_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
-        self.in_org_var = tk.BooleanVar(value=True)
-        self.in_rep_var = tk.BooleanVar(value=True)
-        self.in_note_var = tk.BooleanVar(value=True)
-        self.cb_org = ttk.Checkbutton(self.struct_frame, text="原文", variable=self.in_org_var)
-        self.cb_org.pack(side=tk.LEFT, padx=10)
-        self.cb_rep = ttk.Checkbutton(self.struct_frame, text="译文", variable=self.in_rep_var)
-        self.cb_rep.pack(side=tk.LEFT, padx=10)
-        self.cb_note = ttk.Checkbutton(self.struct_frame, text="注释", variable=self.in_note_var)
-        self.cb_note.pack(side=tk.LEFT, padx=10)
-
         # 按鈕
         btn_frame = ttk.Frame(main_frame)
         btn_frame.grid(row=4, column=0, columnspan=3, pady=10)
@@ -102,26 +80,9 @@ class FindReplaceDialog(tk.Toplevel):
         ttk.Button(btn_frame, text="查找下一个", command=self.find_next).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="替换", command=self.replace).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="替换全部", command=self.replace_all).pack(side=tk.LEFT, padx=5)
-
-        self.toggle_structured_options() # 初始化状态
-
-    def toggle_structured_options(self):
-        state = tk.NORMAL if self.structured_search_var.get() else tk.DISABLED
-        for cb in [self.cb_org, self.cb_rep, self.cb_note]:
-            cb.config(state=state)
-        self.struct_frame.config(text="结构化查找替换范围" if state == tk.NORMAL else "结构化查找替换 (已禁用)")
-
-    def _get_current_find_options(self):
-        # ... (此方法仅用于结构化查找替换)
-        return {
-            "find_text": self.find_entry.get(), "case": self.case_var.get(),
-            "regex": self.regex_var.get(), "in_org": self.in_org_var.get(),
-            "in_rep": self.in_rep_var.get(), "in_note": self.in_note_var.get(),
-            "content": self.target.get("1.0", tk.END)
-        }
     
-    # 非结构化查找逻辑，使用 count 参数确保长度准确
-    def _perform_plain_find(self, backwards=False):
+    # 查找逻辑，使用 count 参数确保长度准确
+    def _perform_find(self, backwards=False):
         self.target.tag_remove('found', '1.0', tk.END)
         find_str = self.find_entry.get()
         if not find_str: return
@@ -155,83 +116,6 @@ class FindReplaceDialog(tk.Toplevel):
         else:
             messagebox.showinfo("提示", "未找到指定内容", parent=self)
 
-    def _populate_matches(self):
-        # (结构化查找替换逻辑)
-        self.matches = []
-        find_text = self.last_find_options['find_text']
-        content = self.last_find_options['content']
-        flags = re.IGNORECASE if not self.last_find_options['case'] else 0
-
-        # 移除内容开头的UTF-8 BOM, 避免首行注释判断失效
-        if content.startswith('\ufeff'):
-            content = content[1:]
-
-        format_key = self.app.get_format_key(self.app.detect_format(content), display_name=True)
-        if not format_key: return
-
-        search_fields = [f for f,v in {"org":self.in_org_var,"rep":self.in_rep_var,"note":self.in_note_var}.items() if v.get()]
-
-        try:
-            if format_key == "GalTransl_TSV":
-                lines = content.split('\n')
-                for line_idx, line in enumerate(lines):
-                    # ### 改进 ###: 严格跳过注释行
-                    if not line.strip() or line.strip().startswith(('//', '#')): continue
-                    
-                    delimiter_pattern = r'\t|(?<=\S) {4}(?=\S)'
-                    delimiters = list(re.finditer(delimiter_pattern, line))
-                    
-                    def _find_and_add_matches_tsv(text, base_offset):
-                        for match in re.finditer(find_text, text, flags):
-                            start_pos = f"{line_idx + 1}.{base_offset + match.start()}"
-                            end_pos = f"{start_pos} + {len(match.group(0))}c"
-                            self.matches.append((start_pos, end_pos, match))
-
-                    if 'org' in search_fields:
-                        _find_and_add_matches_tsv(line[0:(delimiters[0].start() if delimiters else len(line))], 0)
-                    if 'rep' in search_fields and len(delimiters) >= 1:
-                        s, e = delimiters[0].end(), delimiters[1].start() if len(delimiters) >= 2 else len(line)
-                        _find_and_add_matches_tsv(line[s:e], s)
-                    if 'note' in search_fields and len(delimiters) >= 2:
-                        s = delimiters[1].end()
-                        _find_and_add_matches_tsv(line[s:], s)
-            else: # TOML / JSON
-                field_patterns = {
-                    'org': r"(?:org|searchStr|srt)\s*=\s*(['\"])((?:(?!\1).|\\.)*?)\1|" + r'"(?:searchStr|srt)"\s*:\s*(")((?:[^"\\]|\\.)*?)\3',
-                    'rep': r"(?:rep|replaceStr|dst)\s*=\s*(['\"])((?:(?!\1).|\\.)*?)\1|" + r'"(?:replaceStr|dst)"\s*:\s*(")((?:[^"\\]|\\.)*?)\3',
-                    'note': r"(?:note|info)\s*=\s*(['\"])((?:(?!\1).|\\.)*?)\1|" + r'"(?:note|info)"\s*:\s*(")((?:[^"\\]|\\.)*?)\3'
-                }
-
-                entry_pattern, field_order = None, []
-                if format_key == "GPPGUI_TOML":
-                    entry_pattern = r'(\{[\s\S]*?\})'
-                    field_order = ['org', 'rep', 'note']
-                elif format_key == "GPPCLI_TOML":
-                    entry_pattern = r'\[\[gptDict\]\][\s\S]*?(?=\n\[\[gptDict\]\]|\Z)'
-                    field_order = ['note', 'rep', 'org']
-                elif format_key == "AiNiee_JSON":
-                    entry_pattern = r'(\{[\s\S]*?\})'
-                    field_order = ['org', 'rep', 'note']
-
-                if not entry_pattern: return
-                
-                for entry_match in re.finditer(entry_pattern, content):
-                    # ### 改进 ###: 严格跳过注释的条目
-                    if entry_match.group(0).strip().startswith('#'): continue
-
-                    entry_text, entry_offset = entry_match.group(0), entry_match.start(0)
-                    for field in field_order:
-                        if field in search_fields:
-                            for kv_match in re.finditer(field_patterns[field], entry_text):
-                                val_txt, val_start = (kv_match.group(2), kv_match.start(2)) if kv_match.group(2) is not None else (kv_match.group(4), kv_match.start(4))
-                                for inner_match in re.finditer(find_text, val_txt, flags):
-                                    abs_start = entry_offset + val_start + inner_match.start()
-                                    abs_end = entry_offset + val_start + inner_match.end()
-                                    start_pos, end_pos = f"1.0 + {abs_start}c", f"1.0 + {abs_end}c"
-                                    self.matches.append((start_pos, end_pos, inner_match))
-        except re.error as e: messagebox.showerror("正则表达式错误", str(e), parent=self)
-        except Exception as e: messagebox.showerror("查找错误", f"结构化查找时发生未知错误: {e}", parent=self)
-
     def _highlight_match(self, start_pos, end_pos):
         self.target.tag_remove('found', '1.0', tk.END)
         self.target.tag_remove(tk.SEL, "1.0", tk.END)
@@ -241,32 +125,7 @@ class FindReplaceDialog(tk.Toplevel):
         self.target.focus_set()
 
     def _find_driver(self, direction):
-        if not self.structured_search_var.get():
-            self._perform_plain_find(backwards=(direction == -1))
-            return
-
-        find_options = self._get_current_find_options()
-        if not find_options["find_text"]: return
-
-        if self.last_find_options != find_options:
-            self.last_find_options = find_options
-            self._populate_matches()
-            self.current_match_index = -1 if direction == 1 else len(self.matches)
-
-        if not self.matches:
-            messagebox.showinfo("提示", "未找到指定内容", parent=self)
-            return
-
-        self.current_match_index += direction
-        if self.current_match_index >= len(self.matches):
-            self.current_match_index = 0
-            messagebox.showinfo("提示", "已回绕搜索。", parent=self)
-        elif self.current_match_index < 0:
-            self.current_match_index = len(self.matches) - 1
-            messagebox.showinfo("提示", "已回绕搜索。", parent=self)
-
-        start_pos, end_pos, _ = self.matches[self.current_match_index]
-        self._highlight_match(start_pos, end_pos)
+        self._perform_find(backwards=(direction == -1))
 
     def find_next(self): self._find_driver(1)
     def find_previous(self): self._find_driver(-1)
@@ -280,11 +139,6 @@ class FindReplaceDialog(tk.Toplevel):
             return
 
         replace_text = self.replace_entry.get()
-        if self.structured_search_var.get() and self.regex_var.get():
-            if -1 < self.current_match_index < len(self.matches):
-                match_obj = self.matches[self.current_match_index][2]
-                replace_text = match_obj.expand(replace_text)
-        
         self.target.edit_separator()
         self.target.delete(sel_start, sel_end)
         self.target.insert(sel_start, replace_text)
@@ -295,15 +149,9 @@ class FindReplaceDialog(tk.Toplevel):
         find_text = self.find_entry.get()
         if not find_text: return
         
-        if self.structured_search_var.get():
-            self.app.replace_all_structured(
-                target_widget=self.target, find_text=find_text, replace_text=self.replace_entry.get(),
-                search_in_org=self.in_org_var.get(), search_in_rep=self.in_rep_var.get(), search_in_note=self.in_note_var.get(),
-                use_regex=self.regex_var.get(), case_sensitive=self.case_var.get())
-        else:
-            self.app.replace_all_plain(
-                target_widget=self.target, find_text=find_text, replace_text=self.replace_entry.get(),
-                use_regex=self.regex_var.get(), case_sensitive=self.case_var.get())
+        self.app.replace_all(
+            target_widget=self.target, find_text=find_text, replace_text=self.replace_entry.get(),
+            use_regex=self.regex_var.get(), case_sensitive=self.case_var.get())
 
     def close_dialog(self):
         self.target.tag_remove('found', '1.0', tk.END)
@@ -522,9 +370,7 @@ class GPTDictConverter:
         编辑功能 (在输入框中生效):
         - 查找与替换 (快捷键 Ctrl+F):
           - 打开查找与替换对话框。
-          - 支持区分大小写、正则表达式、结构化查找等高级功能。
-          - 结构化查找: 仅在原文、译文、注释这些
-            特定字段内进行查找和替换，避免破坏文件结构。
+          - 支持区分大小写、正则表达式等高级功能。
 
         - 注释/取消注释 (快捷键 Ctrl+/):
           - 快速为选中行或当前光标所在行添加或移除注释符号 (# 或 //)。
@@ -585,7 +431,7 @@ class GPTDictConverter:
         FindReplaceDialog(self.root, target, app_instance=self)
         return "break"
     
-    def replace_all_plain(self, target_widget, find_text, replace_text, use_regex, case_sensitive):
+    def replace_all(self, target_widget, find_text, replace_text, use_regex, case_sensitive):
         content = target_widget.get("1.0", "end-1c")
         lines = content.split('\n')
         new_lines = []
@@ -628,68 +474,6 @@ class GPTDictConverter:
             messagebox.showinfo("成功", f"已完成 {total_count} 处替换。")
         else:
             messagebox.showinfo("提示", "未找到可替换的内容。")
-
-    def replace_all_structured(self, target_widget, find_text, replace_text, 
-                               search_in_org, search_in_rep, search_in_note,
-                               use_regex, case_sensitive):
-        content = target_widget.get("1.0", tk.END)
-        format_display_name = self.detect_format(content)
-        if not format_display_name:
-            messagebox.showerror("错误", "无法自动检测输入内容的格式，无法执行“全部替换”。")
-            return
-
-        try:
-            data = self.parse_input(content, format_display_name)
-            total_replacements = 0
-            flags = 0 if case_sensitive else re.IGNORECASE
-            
-            for item in data:
-                fields_to_search = []
-                if search_in_org and 'org' in item: fields_to_search.append('org')
-                if search_in_rep and 'rep' in item: fields_to_search.append('rep')
-                if search_in_note and 'note' in item: fields_to_search.append('note')
-
-                for field in fields_to_search:
-                    original_text = item[field]
-                    if not original_text: continue
-
-                    if use_regex:
-                        new_text, count = re.subn(find_text, replace_text, original_text, flags=flags)
-                        if count > 0:
-                            item[field] = new_text
-                            total_replacements += count
-                    else:
-                        if case_sensitive:
-                            count = original_text.count(find_text)
-                            if count > 0:
-                                item[field] = original_text.replace(find_text, replace_text)
-                                total_replacements += count
-                        else:
-                            pattern = re.compile(re.escape(find_text), flags)
-                            new_text, count = pattern.subn(replace_text, original_text)
-                            if count > 0:
-                                item[field] = new_text
-                                total_replacements += count
-            
-            if total_replacements == 0:
-                messagebox.showinfo("提示", "未找到可替换的内容。")
-                return
-            
-            format_key = self.get_format_key(format_display_name, display_name=True)
-            output_content = self.format_output(data, format_key)
-            
-            target_widget.edit_separator()
-            target_widget.delete("1.0", tk.END)
-            target_widget.insert("1.0", output_content)
-            target_widget.edit_separator()
-            self._update_all_highlights(target_widget)
-            
-            messagebox.showinfo("成功", f"已完成 {total_replacements} 处替换。")
-            self.input_format.set(format_display_name)
-        except re.error as e:
-            messagebox.showerror("正则表达式错误", str(e))
-        except Exception as e:
-            messagebox.showerror("错误", f"结构化替换失败: {e}")
 
     def _toggle_comment(self, event):
         widget = event.widget
