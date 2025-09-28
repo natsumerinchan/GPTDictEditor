@@ -165,7 +165,7 @@ class GPTDictConverter:
         self.root = root
         self.version = "v1.0.2"
         self.root.title(f"GPT字典编辑转换器   {self.version}")
-        self.root.geometry("800x600")
+        self.root.geometry("1000x600")
         self.current_file_path = None
         
         self.format_names = {
@@ -182,53 +182,82 @@ class GPTDictConverter:
         
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
+        main_frame.rowconfigure(1, weight=1)
         
-        main_frame.rowconfigure(3, weight=1)
-        main_frame.rowconfigure(6, weight=1) 
+        # 顶部控制区域 - 居中布局
+        top_control_frame = ttk.Frame(main_frame)
+        top_control_frame.grid(row=0, column=0, columnspan=3, pady=5, sticky=tk.N)
         
-        ttk.Label(main_frame, text="输入格式:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.input_format = ttk.Combobox(main_frame, values=["自动检测"] + list(self.format_names.values()), state="readonly", width=25)
+        # 格式选择
+        format_frame = ttk.Frame(top_control_frame)
+        format_frame.pack(side=tk.LEFT, padx=10)
+        
+        ttk.Label(format_frame, text="输入格式:").pack(anchor=tk.W, pady=2)
+        self.input_format = ttk.Combobox(format_frame, values=["自动检测"] + list(self.format_names.values()), 
+                                      state="readonly", width=25)
         self.input_format.set("自动检测")
-        self.input_format.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 20))
+        self.input_format.pack(pady=2)
         self.input_format.bind("<<ComboboxSelected>>", self._on_input_format_change)
         
-        ttk.Label(main_frame, text="输出格式:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        self.output_format = ttk.Combobox(main_frame, values=list(self.format_names.values()), state="readonly", width=25)
+        ttk.Label(format_frame, text="输出格式:").pack(anchor=tk.W, pady=2)
+        self.output_format = ttk.Combobox(format_frame, values=list(self.format_names.values()), 
+                                       state="readonly", width=25)
         self.output_format.set("GalTranslPP GUI TOML格式")
-        self.output_format.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 20))
+        self.output_format.pack(pady=2)
         
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=0, column=2, rowspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5, padx=(20, 0))
+        # 按钮区域
+        button_frame = ttk.Frame(top_control_frame)
+        button_frame.pack(side=tk.LEFT, padx=20)
         
-        ttk.Button(button_frame, text="打开文件", command=self.open_file).pack(side=tk.TOP, fill=tk.X, pady=2)
-        ttk.Button(button_frame, text="保存输入内容", command=self.save_input_file).pack(side=tk.TOP, fill=tk.X, pady=2)
-        ttk.Button(button_frame, text="保存输出内容", command=self.save_file).pack(side=tk.TOP, fill=tk.X, pady=2)
-        ttk.Button(button_frame, text="转换", command=self.convert).pack(side=tk.TOP, fill=tk.X, pady=2)
-        ttk.Button(button_frame, text="清空", command=self.clear).pack(side=tk.TOP, fill=tk.X, pady=2)
+        ttk.Button(button_frame, text="打开文件", command=self.open_file).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="保存输入内容", command=self.save_input_file).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="保存输出内容", command=self.save_file).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="转换", command=self.convert).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="清空", command=self.clear).pack(side=tk.LEFT, padx=5)
         
-        ttk.Label(main_frame, text="输入内容:").grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=5)
-        
-        self.input_text = scrolledtext.ScrolledText(
-            main_frame, width=80, height=12, undo=True, 
-            selectbackground="black", selectforeground="white"
-        )
-        self.input_text.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
-        
-        transfer_frame = ttk.Frame(main_frame)
-        transfer_frame.grid(row=4, column=0, columnspan=3, pady=2)
-        ttk.Button(transfer_frame, text="▲", command=self.transfer_output_to_input).pack()
+        # 内容区域框架
+        content_frame = ttk.Frame(main_frame)
+        content_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.columnconfigure(2, weight=1)
+        content_frame.rowconfigure(0, weight=1)
 
-        output_header_frame = ttk.Frame(main_frame)
-        output_header_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5,0))
+        # 输入框区域
+        input_frame = ttk.Frame(content_frame)
+        input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        
+        ttk.Label(input_frame, text="输入内容:").pack(anchor=tk.W, pady=5)
+        self.input_text = scrolledtext.ScrolledText(
+            input_frame, width=40, height=20, undo=True,
+            selectbackground="black", selectforeground="white",
+            borderwidth=1, relief="solid",
+            highlightthickness=1, highlightbackground="#c0c0c0"
+        )
+        self.input_text.pack(expand=True, fill=tk.BOTH)
+
+        # 转移按钮
+        transfer_frame = ttk.Frame(content_frame)
+        transfer_frame.grid(row=0, column=1, sticky=tk.N)
+        ttk.Button(transfer_frame, text="←", command=self.transfer_output_to_input, width=2).pack(pady=0, fill=tk.Y, expand=True)
+
+        # 输出框区域
+        output_frame = ttk.Frame(content_frame)
+        output_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
+        
+        output_header_frame = ttk.Frame(output_frame)
+        output_header_frame.pack(fill=tk.X)
         ttk.Label(output_header_frame, text="输出内容:").pack(side=tk.LEFT)
         ttk.Button(output_header_frame, text="复制", command=self.copy_output).pack(side=tk.LEFT, padx=10)
 
         self.output_text = scrolledtext.ScrolledText(
-            main_frame, width=80, height=12, undo=True, state=tk.DISABLED,
-            selectbackground="black", selectforeground="white"
+            output_frame, width=40, height=20, undo=True, state=tk.DISABLED,
+            selectbackground="black", selectforeground="white",
+            borderwidth=1, relief="solid",
+            highlightthickness=1, highlightbackground="#c0c0c0"
         )
-        self.output_text.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        self.output_text.pack(expand=True, fill=tk.BOTH)
         
         self.status_var = tk.StringVar(value="就绪")
         status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN)
@@ -364,7 +393,7 @@ class GPTDictConverter:
         其他功能:
         - 清空: 点击“清空”按钮以清除输入和输出框的所有内容。
         - 复制: 点击输出框旁的“复制”按钮，快速复制输出结果。
-        - ▲ 按钮: 点击输入框和输出框之间的 ▲ 按钮，可以将当前输出内容
+        - ← 按钮: 点击输入框和输出框之间的 ← 按钮，可以将当前输出内容
           转移到输入框，方便进行二次编辑或格式转换。
         
         编辑功能 (在输入框中生效):
@@ -400,15 +429,32 @@ class GPTDictConverter:
     def _setup_editor_features(self):
         widgets = [self.input_text, self.output_text]
         for widget in widgets:
-            widget.tag_configure("key", foreground="#9CDCFE")
-            widget.tag_configure("string", foreground="#CE9178")
-            widget.tag_configure("punc", foreground="#D4D4D4")
-            widget.tag_configure("number", foreground="#B5CEA8")
-            widget.tag_configure("comment", foreground="#6A9955")
-            widget.tag_configure("tsv_tab", background="#e0f0ff")
-            widget.tag_configure("tsv_space_delimiter", background="black", foreground="white")
-            widget.tag_configure("highlight_duplicate", background="#555555", foreground="white")
-            widget.tag_configure('found', background='darkred', foreground='white')
+            widget.config(
+                font=("Consolas", 10),
+                background="#FFFFFF",  # 白色背景
+                foreground="#000000",  # 黑色文字
+                insertbackground="#000000",  # 黑色光标
+                selectbackground="#ADD6FF",  # 浅蓝色选中背景
+                selectforeground="#000000",  # 黑色选中文字
+                inactiveselectbackground="#E5E5E5",  # 灰色非活动选中背景
+                insertwidth=2,
+                padx=5,
+                pady=5,
+                wrap=tk.NONE
+            )
+            
+            # 语法高亮颜色配置
+            widget.tag_configure("key", foreground="#0000FF")  # 蓝色关键字
+            widget.tag_configure("string", foreground="#A31515")  # 深红色字符串
+            widget.tag_configure("punc", foreground="#000000")  # 黑色标点
+            widget.tag_configure("number", foreground="#098658")  # 绿色数字
+            widget.tag_configure("comment", foreground="#008000")  # 绿色注释
+            widget.tag_configure("tsv_tab", background="#E5E5E5")  # 浅灰色制表符高亮
+            widget.tag_configure("tsv_space_delimiter", background="#E5E5E5", foreground="black")  # 浅灰色空格分隔符
+            widget.tag_configure("highlight_duplicate", background="#7FB4FF")  # 浅蓝色匹配词高亮
+            widget.tag_configure('found', background='#ADD6FF')  # 浅蓝色选中词高亮
+            
+            # 绑定事件
             widget.bind("<KeyRelease>", self._on_text_change)
             widget.bind("<ButtonRelease-1>", self._on_text_change)
             widget.bind("<Control-slash>", self._toggle_comment)
