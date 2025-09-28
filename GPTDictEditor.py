@@ -37,10 +37,6 @@ import tkinter.font as tkFont
 # 新增: 带行号的自定义编辑器组件
 # #####################################################################
 class EditorWithLineNumbers(tk.Frame):
-    """
-    一个包含文本框、行号显示和滚动条的自定义编辑器组件。
-    模仿 VS Code 明亮主题的风格。
-    """
     def __init__(self, master, *args, **kwargs):
         super().__init__(master)
         
@@ -68,29 +64,22 @@ class EditorWithLineNumbers(tk.Frame):
         self.text.bind("<Configure>", self._on_change_proxy)
         self.text.bind("<KeyRelease>", self._on_change_proxy)
         self.text.bind("<ButtonRelease-1>", self._on_change_proxy)
-        # ### 修正: 移除了对 <MouseWheel> 的手动绑定，让 Text 组件自己处理 ###
 
         self._redraw_job = None
         self.text.edit_modified(False)
 
     def on_text_scroll(self, first, last):
-        """当文本框滚动时，同步更新滚动条和行号区域"""
         self.vbar.set(first, last)
         self.linenumbers.yview_moveto(first)
-        # ### 修正: 在滚动时触发重绘，以更新行号 ###
         self._on_change_proxy()
 
     def yview(self, *args):
-        """当滚动条被拖动时，同步更新文本框和行号区域"""
         self.text.yview(*args)
         self.linenumbers.yview(*args)
         self._on_change_proxy()
         return "break"
 
     def _on_change_proxy(self, event=None):
-        """
-        一个代理方法，用于延迟执行重绘，避免在快速输入时造成性能问题。
-        """
         if self._redraw_job:
             self.after_cancel(self._redraw_job)
         self._redraw_job = self.after(20, self.redraw_line_numbers)
@@ -99,7 +88,6 @@ class EditorWithLineNumbers(tk.Frame):
             self.text.edit_modified(False)
 
     def redraw_line_numbers(self):
-        """核心方法：重绘行号"""
         self.linenumbers.delete("all")
 
         try:
@@ -130,7 +118,6 @@ class EditorWithLineNumbers(tk.Frame):
             pass
 
     def config(self, cnf=None, **kw):
-        """重写 config 方法，将配置项正确传递给内部的 Text 组件"""
         all_options = (cnf or {}).copy()
         all_options.update(kw)
         
@@ -146,7 +133,6 @@ class EditorWithLineNumbers(tk.Frame):
             self.text.config(**text_kw)
 
     def __getattr__(self, name):
-        """将所有未知的属性请求代理到内部的 Text 组件"""
         try:
             return getattr(self.text, name)
         except AttributeError:
@@ -154,7 +140,7 @@ class EditorWithLineNumbers(tk.Frame):
 
 
 # #####################################################################
-# 查找与替换对话框类 (无修改)
+# 查找与替换对话框类
 # #####################################################################
 class FindReplaceDialog(tk.Toplevel):
     def __init__(self, master, target_widget, app_instance):
@@ -174,18 +160,15 @@ class FindReplaceDialog(tk.Toplevel):
         main_frame = ttk.Frame(self, padding="10")
         main_frame.pack(expand=True, fill=tk.BOTH)
 
-        # 查找
         ttk.Label(main_frame, text="查找:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
         self.find_entry = ttk.Entry(main_frame, width=40)
         self.find_entry.grid(row=0, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=5)
         self.find_entry.focus_set()
 
-        # 替换
         ttk.Label(main_frame, text="替换:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
         self.replace_entry = ttk.Entry(main_frame, width=40)
         self.replace_entry.grid(row=1, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=5)
 
-        # 选项
         option_frame = ttk.Frame(main_frame)
         option_frame.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=5)
         self.case_var = tk.BooleanVar()
@@ -193,7 +176,6 @@ class FindReplaceDialog(tk.Toplevel):
         self.regex_var = tk.BooleanVar()
         ttk.Checkbutton(option_frame, text="正则表达式", variable=self.regex_var).pack(side=tk.LEFT, padx=5)
 
-        # 按鈕
         btn_frame = ttk.Frame(main_frame)
         btn_frame.grid(row=4, column=0, columnspan=3, pady=10)
         ttk.Button(btn_frame, text="查找上一个", command=self.find_previous).pack(side=tk.LEFT, padx=5)
@@ -201,7 +183,6 @@ class FindReplaceDialog(tk.Toplevel):
         ttk.Button(btn_frame, text="替换", command=self.replace).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="替换全部", command=self.replace_all).pack(side=tk.LEFT, padx=5)
     
-    # 查找逻辑，使用 count 参数确保长度准确
     def _perform_find(self, backwards=False):
         self.target.tag_remove('found', '1.0', tk.END)
         find_str = self.find_entry.get()
@@ -212,7 +193,6 @@ class FindReplaceDialog(tk.Toplevel):
         except tk.TclError:
             start_pos = self.target.index(tk.INSERT)
 
-        # 使用 self.match_len_var 接收匹配长度，这是最准确的方式
         common_kwargs = {
             "nocase": not self.case_var.get(), 
             "regexp": self.regex_var.get(),
@@ -220,14 +200,13 @@ class FindReplaceDialog(tk.Toplevel):
         }
         
         pos = self.target.search(find_str, start_pos, stopindex="1.0" if backwards else tk.END, backwards=backwards, **common_kwargs)
-        if not pos: # Wrap search
+        if not pos:
             wrap_pos = tk.END if backwards else "1.0"
             stop_index = start_pos
             pos = self.target.search(find_str, wrap_pos, stopindex=stop_index, backwards=backwards, **common_kwargs)
             if pos: messagebox.showinfo("提示", "已回绕搜索。", parent=self)
 
         if pos:
-            # 直接从 self.match_len_var 获取准确长度，不再需要重新计算
             match_length = self.match_len_var.get()
             end_pos = f"{pos} + {match_length}c"
             
@@ -278,12 +257,85 @@ class FindReplaceDialog(tk.Toplevel):
         self.destroy()
 
 # #####################################################################
+# 新增: 转到行对话框
+# #####################################################################
+class GoToLineDialog(tk.Toplevel):
+    def __init__(self, master, app_instance):
+        super().__init__(master)
+        self.app = app_instance
+        self.transient(master)
+        self.title("转到行")
+        self.geometry("280x150")
+        self.resizable(False, False)
+        
+        self.create_widgets()
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.grab_set()
+
+    def create_widgets(self):
+        main_frame = ttk.Frame(self, padding="10")
+        main_frame.pack(expand=True, fill=tk.BOTH)
+
+        input_frame = ttk.Frame(main_frame)
+        input_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(input_frame, text="行号:").pack(side=tk.LEFT, padx=(0, 5))
+        self.line_entry = ttk.Entry(input_frame)
+        self.line_entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        self.line_entry.focus_set()
+        self.line_entry.bind("<Return>", self.on_ok)
+
+        target_frame = ttk.Frame(main_frame)
+        target_frame.pack(pady=5)
+        self.target_var = tk.StringVar(value="input")
+        ttk.Radiobutton(target_frame, text="输入框", variable=self.target_var, value="input").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(target_frame, text="输出框", variable=self.target_var, value="output").pack(side=tk.LEFT, padx=5)
+
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(pady=10)
+        ttk.Button(btn_frame, text="确定", command=self.on_ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="取消", command=self.destroy).pack(side=tk.LEFT, padx=5)
+
+    def on_ok(self, event=None):
+        line_str = self.line_entry.get()
+        target_choice = self.target_var.get()
+        target_widget = self.app.input_text if target_choice == "input" else self.app.output_text
+
+        try:
+            line_num = int(line_str)
+        except ValueError:
+            messagebox.showerror("错误", "请输入一个有效的数字。", parent=self)
+            return
+
+        total_lines = int(target_widget.index('end-1c').split('.')[0])
+        if not (1 <= line_num <= total_lines):
+            messagebox.showerror("错误", f"行号必须在 1 到 {total_lines} 之间。", parent=self)
+            return
+
+        was_disabled = (target_widget.text.cget("state") == tk.DISABLED)
+        
+        if was_disabled:
+            target_widget.config(state=tk.NORMAL)
+
+        for widget in [self.app.input_text, self.app.output_text]:
+            widget.tag_remove("goto_line", "1.0", tk.END)
+        target_widget.tag_add("goto_line", f"{line_num}.0", f"{line_num}.end")
+
+        target_widget.mark_set(tk.INSERT, f"{line_num}.0")
+        target_widget.see(f"{line_num}.0")
+        target_widget.focus_set()
+
+        if was_disabled:
+            target_widget.config(state=tk.DISABLED)
+
+        self.destroy()
+
+# #####################################################################
 # 主应用程序类
 # #####################################################################
 class GPTDictConverter:
     def __init__(self, root):
         self.root = root
-        self.version = "v1.0.2"
+        self.version = "v1.0.3"
         self.root.title(f"GPT字典编辑转换器   {self.version}")
         self.root.geometry("1000x600")
         self.current_file_path = None
@@ -306,11 +358,9 @@ class GPTDictConverter:
         main_frame.columnconfigure(1, weight=1)
         main_frame.rowconfigure(1, weight=1)
         
-        # 顶部控制区域 - 居中布局
         top_control_frame = ttk.Frame(main_frame)
         top_control_frame.grid(row=0, column=0, columnspan=3, pady=5, sticky=tk.N)
         
-        # 格式选择
         format_frame = ttk.Frame(top_control_frame)
         format_frame.pack(side=tk.LEFT, padx=10)
         
@@ -327,7 +377,6 @@ class GPTDictConverter:
         self.output_format.set("GalTranslPP GUI TOML格式")
         self.output_format.pack(pady=2)
         
-        # 按钮区域
         button_frame = ttk.Frame(top_control_frame)
         button_frame.pack(side=tk.LEFT, padx=20)
         
@@ -337,14 +386,12 @@ class GPTDictConverter:
         ttk.Button(button_frame, text="转换", command=self.convert).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="清空", command=self.clear).pack(side=tk.LEFT, padx=5)
         
-        # 内容区域框架
         content_frame = ttk.Frame(main_frame)
         content_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
         content_frame.columnconfigure(0, weight=1)
         content_frame.columnconfigure(2, weight=1)
         content_frame.rowconfigure(0, weight=1)
 
-        # 输入框区域
         input_frame = ttk.Frame(content_frame)
         input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         
@@ -357,12 +404,10 @@ class GPTDictConverter:
         )
         self.input_text.pack(expand=True, fill=tk.BOTH)
 
-        # 转移按钮
         transfer_frame = ttk.Frame(content_frame)
         transfer_frame.grid(row=0, column=1, sticky=tk.N)
         ttk.Button(transfer_frame, text="←", command=self.transfer_output_to_input, width=2).pack(pady=0, fill=tk.Y, expand=True)
 
-        # 输出框区域
         output_frame = ttk.Frame(content_frame)
         output_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
@@ -423,6 +468,7 @@ class GPTDictConverter:
         edit_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="编辑", menu=edit_menu)
         edit_menu.add_command(label="查找与替换 (Ctrl+F)", command=self._show_find_replace_dialog)
+        edit_menu.add_command(label="转到行... (Ctrl+G)", command=self._show_goto_line_dialog)
 
         help_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="帮助", menu=help_menu)
@@ -547,7 +593,7 @@ class GPTDictConverter:
 
     def _setup_editor_features(self):
         widgets = [self.input_text, self.output_text]
-        for widget in widgets:
+        for widget in widgets: # 'widget' is an EditorWithLineNumbers instance
             widget.config(
                 font=("Consolas", 10),
                 background="#FFFFFF",
@@ -561,6 +607,7 @@ class GPTDictConverter:
                 pady=5,
             )
             
+            # tag_configure can be called on the wrapper thanks to __getattr__
             widget.tag_configure("key", foreground="#0000FF")
             widget.tag_configure("string", foreground="#A31515")
             widget.tag_configure("punc", foreground="#000000")
@@ -570,11 +617,20 @@ class GPTDictConverter:
             widget.tag_configure("tsv_space_delimiter", background="#E5E5E5", foreground="black")
             widget.tag_configure("highlight_duplicate", background="#7FB4FF")
             widget.tag_configure('found', background='#ADD6FF')
+            widget.tag_configure('goto_line', background='#fffacd')
             
-            widget.bind("<KeyRelease>", self._on_text_change)
-            widget.bind("<ButtonRelease-1>", self._on_text_change)
-            widget.bind("<Control-slash>", self._toggle_comment)
-            widget.bind("<Control-f>", self._show_find_replace_dialog)
+            # ### 修正: 必须将事件绑定到拥有焦点的内部 Text 组件上 ###
+            internal_text_widget = widget.text
+            
+            # 这些事件由内部 Text 组件触发
+            internal_text_widget.bind("<KeyRelease>", self._on_text_change)
+            internal_text_widget.bind("<ButtonRelease-1>", self._on_text_change)
+            
+            # 快捷键事件也必须绑定在内部 Text 组件上
+            internal_text_widget.bind("<Control-slash>", self._toggle_comment)
+            internal_text_widget.bind("<Control-f>", self._show_find_replace_dialog)
+            internal_text_widget.bind("<Control-g>", self._show_goto_line_dialog)
+            
         self.highlight_job = None
         
     def _on_text_change(self, event=None):
@@ -584,6 +640,8 @@ class GPTDictConverter:
         widget = event.widget if event else self.root.focus_get()
 
         if isinstance(widget, tk.Text):
+            widget.tag_remove("goto_line", "1.0", tk.END)
+
             parent_editor = widget
             while not isinstance(parent_editor, EditorWithLineNumbers) and parent_editor is not None:
                 parent_editor = parent_editor.master
@@ -600,6 +658,10 @@ class GPTDictConverter:
         FindReplaceDialog(self.root, target, app_instance=self)
         return "break"
     
+    def _show_goto_line_dialog(self, event=None):
+        GoToLineDialog(self.root, app_instance=self)
+        return "break"
+
     def replace_all(self, target_widget, find_text, replace_text, use_regex, case_sensitive):
         content = target_widget.get("1.0", "end-1c")
         lines = content.split('\n')
