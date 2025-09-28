@@ -34,7 +34,127 @@ import webbrowser
 import tkinter.font as tkFont
 
 # #####################################################################
-# 查找与替换对话框类
+# 新增: 带行号的自定义编辑器组件
+# #####################################################################
+class EditorWithLineNumbers(tk.Frame):
+    """
+    一个包含文本框、行号显示和滚动条的自定义编辑器组件。
+    模仿 VS Code 明亮主题的风格。
+    """
+    def __init__(self, master, *args, **kwargs):
+        super().__init__(master)
+        
+        self.text_font = kwargs.get('font', ("Consolas", 10))
+        
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+
+        self.linenumbers = tk.Canvas(self, width=40, background="#f0f0f0", highlightthickness=0)
+        self.linenumbers.grid(row=0, column=0, sticky="ns")
+
+        self.vbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.yview)
+        self.vbar.grid(row=0, column=2, sticky="ns")
+        
+        self.hbar = ttk.Scrollbar(self, orient=tk.HORIZONTAL)
+        self.hbar.grid(row=1, column=1, sticky="ew")
+
+        self.text = tk.Text(self, undo=True, wrap=tk.NONE, *args, **kwargs)
+        self.text.grid(row=0, column=1, sticky="nsew")
+
+        self.text.config(yscrollcommand=self.on_text_scroll, xscrollcommand=self.hbar.set)
+        self.hbar.config(command=self.text.xview)
+
+        self.text.bind("<<Modified>>", self._on_change_proxy)
+        self.text.bind("<Configure>", self._on_change_proxy)
+        self.text.bind("<KeyRelease>", self._on_change_proxy)
+        self.text.bind("<ButtonRelease-1>", self._on_change_proxy)
+        # ### 修正: 移除了对 <MouseWheel> 的手动绑定，让 Text 组件自己处理 ###
+
+        self._redraw_job = None
+        self.text.edit_modified(False)
+
+    def on_text_scroll(self, first, last):
+        """当文本框滚动时，同步更新滚动条和行号区域"""
+        self.vbar.set(first, last)
+        self.linenumbers.yview_moveto(first)
+        # ### 修正: 在滚动时触发重绘，以更新行号 ###
+        self._on_change_proxy()
+
+    def yview(self, *args):
+        """当滚动条被拖动时，同步更新文本框和行号区域"""
+        self.text.yview(*args)
+        self.linenumbers.yview(*args)
+        self._on_change_proxy()
+        return "break"
+
+    def _on_change_proxy(self, event=None):
+        """
+        一个代理方法，用于延迟执行重绘，避免在快速输入时造成性能问题。
+        """
+        if self._redraw_job:
+            self.after_cancel(self._redraw_job)
+        self._redraw_job = self.after(20, self.redraw_line_numbers)
+        
+        if self.text.edit_modified():
+            self.text.edit_modified(False)
+
+    def redraw_line_numbers(self):
+        """核心方法：重绘行号"""
+        self.linenumbers.delete("all")
+
+        try:
+            total_lines_str = self.text.index('end-1c').split('.')[0]
+            line_count = int(total_lines_str) if total_lines_str else 1
+            new_width = 20 + len(total_lines_str) * 8
+            if self.linenumbers.winfo_width() != new_width:
+                self.linenumbers.config(width=new_width)
+
+            current_line = self.text.index(tk.INSERT).split('.')[0]
+            
+            i = self.text.index("@0,0")
+            while True:
+                dline = self.text.dlineinfo(i)
+                if dline is None: break
+                
+                y = dline[1]
+                linenum = i.split('.')[0]
+                
+                color = "#1e1e1e" if linenum == current_line else "#858585"
+
+                self.linenumbers.create_text(
+                    new_width - 5, y, anchor=tk.NE, text=linenum,
+                    fill=color, font=self.text_font
+                )
+                i = self.text.index(f"{i}+1line")
+        except (tk.TclError, ValueError):
+            pass
+
+    def config(self, cnf=None, **kw):
+        """重写 config 方法，将配置项正确传递给内部的 Text 组件"""
+        all_options = (cnf or {}).copy()
+        all_options.update(kw)
+        
+        text_keys = tk.Text().keys()
+        text_kw = {k: v for k, v in all_options.items() if k in text_keys}
+        frame_kw = {k: v for k, v in all_options.items() if k not in text_keys}
+            
+        if 'font' in text_kw:
+            self.text_font = text_kw['font']
+        
+        super().config(**frame_kw)
+        if text_kw:
+            self.text.config(**text_kw)
+
+    def __getattr__(self, name):
+        """将所有未知的属性请求代理到内部的 Text 组件"""
+        try:
+            return getattr(self.text, name)
+        except AttributeError:
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+
+# #####################################################################
+# 查找与替换对话框类 (无修改)
 # #####################################################################
 class FindReplaceDialog(tk.Toplevel):
     def __init__(self, master, target_widget, app_instance):
@@ -229,8 +349,8 @@ class GPTDictConverter:
         input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         
         ttk.Label(input_frame, text="输入内容:").pack(anchor=tk.W, pady=5)
-        self.input_text = scrolledtext.ScrolledText(
-            input_frame, width=40, height=20, undo=True,
+        self.input_text = EditorWithLineNumbers(
+            input_frame,
             selectbackground="black", selectforeground="white",
             borderwidth=1, relief="solid",
             highlightthickness=1, highlightbackground="#c0c0c0"
@@ -250,9 +370,9 @@ class GPTDictConverter:
         output_header_frame.pack(fill=tk.X)
         ttk.Label(output_header_frame, text="输出内容:").pack(side=tk.LEFT)
         ttk.Button(output_header_frame, text="复制", command=self.copy_output).pack(side=tk.LEFT, padx=10)
-
-        self.output_text = scrolledtext.ScrolledText(
-            output_frame, width=40, height=20, undo=True, state=tk.DISABLED,
+        
+        self.output_text = EditorWithLineNumbers(
+            output_frame, state=tk.DISABLED,
             selectbackground="black", selectforeground="white",
             borderwidth=1, relief="solid",
             highlightthickness=1, highlightbackground="#c0c0c0"
@@ -266,7 +386,6 @@ class GPTDictConverter:
         self._setup_editor_features()
         
     def _on_input_format_change(self, event=None):
-        """当手动更改输入格式时，重置文件路径以防意外覆盖。"""
         if self.current_file_path:
             self.current_file_path = None
             self.status_var.set("输入格式已更改，文件关联已重置。")
@@ -431,30 +550,27 @@ class GPTDictConverter:
         for widget in widgets:
             widget.config(
                 font=("Consolas", 10),
-                background="#FFFFFF",  # 白色背景
-                foreground="#000000",  # 黑色文字
-                insertbackground="#000000",  # 黑色光标
-                selectbackground="#ADD6FF",  # 浅蓝色选中背景
-                selectforeground="#000000",  # 黑色选中文字
-                inactiveselectbackground="#E5E5E5",  # 灰色非活动选中背景
+                background="#FFFFFF",
+                foreground="#000000",
+                insertbackground="#000000",
+                selectbackground="#ADD6FF",
+                selectforeground="#000000",
+                inactiveselectbackground="#E5E5E5",
                 insertwidth=2,
                 padx=5,
                 pady=5,
-                wrap=tk.NONE
             )
             
-            # 语法高亮颜色配置
-            widget.tag_configure("key", foreground="#0000FF")  # 蓝色关键字
-            widget.tag_configure("string", foreground="#A31515")  # 深红色字符串
-            widget.tag_configure("punc", foreground="#000000")  # 黑色标点
-            widget.tag_configure("number", foreground="#098658")  # 绿色数字
-            widget.tag_configure("comment", foreground="#008000")  # 绿色注释
-            widget.tag_configure("tsv_tab", background="#E5E5E5")  # 浅灰色制表符高亮
-            widget.tag_configure("tsv_space_delimiter", background="#E5E5E5", foreground="black")  # 浅灰色空格分隔符
-            widget.tag_configure("highlight_duplicate", background="#7FB4FF")  # 浅蓝色匹配词高亮
-            widget.tag_configure('found', background='#ADD6FF')  # 浅蓝色选中词高亮
+            widget.tag_configure("key", foreground="#0000FF")
+            widget.tag_configure("string", foreground="#A31515")
+            widget.tag_configure("punc", foreground="#000000")
+            widget.tag_configure("number", foreground="#098658")
+            widget.tag_configure("comment", foreground="#008000")
+            widget.tag_configure("tsv_tab", background="#E5E5E5")
+            widget.tag_configure("tsv_space_delimiter", background="#E5E5E5", foreground="black")
+            widget.tag_configure("highlight_duplicate", background="#7FB4FF")
+            widget.tag_configure('found', background='#ADD6FF')
             
-            # 绑定事件
             widget.bind("<KeyRelease>", self._on_text_change)
             widget.bind("<ButtonRelease-1>", self._on_text_change)
             widget.bind("<Control-slash>", self._toggle_comment)
@@ -464,9 +580,16 @@ class GPTDictConverter:
     def _on_text_change(self, event=None):
         if hasattr(self, 'highlight_job') and self.highlight_job:
             self.root.after_cancel(self.highlight_job)
-        widget = self.root.focus_get()
+        
+        widget = event.widget if event else self.root.focus_get()
+
         if isinstance(widget, tk.Text):
-            self.highlight_job = self.root.after(200, lambda: self._update_all_highlights(widget))
+            parent_editor = widget
+            while not isinstance(parent_editor, EditorWithLineNumbers) and parent_editor is not None:
+                parent_editor = parent_editor.master
+            
+            if parent_editor:
+                self.highlight_job = self.root.after(200, lambda: self._update_all_highlights(parent_editor))
             
     def _update_all_highlights(self, widget):
         self._apply_syntax_highlighting(widget)
@@ -562,7 +685,10 @@ class GPTDictConverter:
                 widget.insert(f"{i}.0", f"{comment_char} ")
         widget.edit_separator()
         
-        self._update_all_highlights(widget)
+        parent_editor = widget
+        while not isinstance(parent_editor, EditorWithLineNumbers):
+            parent_editor = parent_editor.master
+        self._update_all_highlights(parent_editor)
         return "break"
         
     def _apply_syntax_highlighting(self, widget):
@@ -724,13 +850,11 @@ class GPTDictConverter:
                 self.input_format.set(detected_format_display)
                 input_format = detected_format_display
 
-            # ### 新增逻辑: 如果输入输出格式相同，则执行保留注释的重新格式化 ###
             format_key = self.get_format_key(input_format, display_name=True)
             if input_format == output_format and format_key in ["GalTransl_TSV", "GPPGUI_TOML", "GPPCLI_TOML"]:
                 output_content = self._reformat_current_format(input_content, input_format)
                 status_msg = f"格式化完成: {input_format}"
             else:
-                # ### 原有逻辑: 解析并转换为新格式 ###
                 data = self.parse_input(input_content, input_format)
                 output_key = self.get_format_key(output_format, display_name=True)
                 output_content = self.format_output(data, output_key)
@@ -747,12 +871,7 @@ class GPTDictConverter:
             messagebox.showerror("错误", f"处理失败: {str(e)}")
             self.status_var.set("处理失败")
 
-    # #####################################################################
-    # 新增: 保留注释的重新格式化逻辑
-    # #####################################################################
-
     def _reformat_current_format(self, content, format_display_name):
-        """根据格式，分派到具体的重新格式化函数。"""
         format_key = self.get_format_key(format_display_name, display_name=True)
         if format_key == "GalTransl_TSV":
             return self._reformat_tsv(content)
@@ -763,23 +882,19 @@ class GPTDictConverter:
         return content
 
     def _reformat_tsv(self, content):
-        """重新格式化TSV，保留注释和空行。"""
         new_lines = []
         for line in content.splitlines():
             parsed = self.parse_tsv_line(line)
             if parsed:
-                # 重新生成标准格式的数据行
                 new_line = f"{parsed['org']}\t{parsed['rep']}"
                 if parsed['note']:
                     new_line += f"\t{parsed['note']}"
                 new_lines.append(new_line)
             else:
-                # 保留非数据行（注释、空行等）
                 new_lines.append(line)
         return "\n".join(new_lines)
 
     def _extract_toml_val(self, text, key):
-        """从TOML片段中提取单引号字符串的值。"""
         pattern = rf"{key}\s*=\s*'((?:[^']|'')*)'"
         match = re.search(pattern, text)
         if match:
@@ -787,10 +902,8 @@ class GPTDictConverter:
         return None
 
     def _reformat_gppgui_toml(self, content):
-        """重新格式化GPPGUI TOML，保留注释。"""
         new_lines = []
         for line in content.splitlines():
-            # 匹配包含字典条目的行，并捕获前后部分和注释
             match = re.match(r'^(\s*)(\{.*?\})(\s*,?\s*)(#.*)?$', line)
             if not match:
                 new_lines.append(line)
@@ -804,7 +917,6 @@ class GPTDictConverter:
             note = self._extract_toml_val(entry_text, 'note')
 
             if org is not None and rep is not None and note is not None:
-                # 重新构建标准格式的条目
                 reformatted_entry = "{{ org = '{}', rep = '{}', note = '{}' }}".format(
                     self.escape_toml_string_single(org),
                     self.escape_toml_string_single(rep),
@@ -812,12 +924,10 @@ class GPTDictConverter:
                 )
                 new_lines.append(f"{leading_ws}{reformatted_entry}{trailing_part}{comment}")
             else:
-                # 如果解析失败，保留原行
                 new_lines.append(line)
         return "\n".join(new_lines)
 
     def _extract_toml_val_with_comment(self, line, key):
-        """从TOML行中提取值和行尾注释。"""
         if line is None: return ('', '')
         pattern = rf"^\s*{key}\s*=\s*'((?:[^']|'')*)'(\s*#.*)?\s*$"
         match = re.match(pattern, line)
@@ -825,13 +935,11 @@ class GPTDictConverter:
             val_escaped, comment = match.groups()
             val = val_escaped.replace("''", "'")
             return val, (comment or "")
-        return ('', '') # 如果行不匹配，返回空
+        return ('', '')
 
     def _reformat_gppcli_toml(self, content):
-        """重新格式化GPPCLI TOML，保留注释和块内顺序。"""
-        # 使用正则表达式按[[gptDict]]块分割文本
         blocks = re.split(r'(\n*\[\[gptDict\]\]\n)', content)
-        new_content = [blocks[0]] # 保留文件头
+        new_content = [blocks[0]]
 
         for i in range(1, len(blocks), 2):
             marker = blocks[i]
@@ -853,18 +961,14 @@ class GPTDictConverter:
 
             new_content.append(marker.strip())
 
-            # 写入重新格式化的行，保留行尾注释
             new_content.append(f"note = '{self.escape_toml_string_single(note_val)}'{note_comment}")
             new_content.append(f"replaceStr = '{self.escape_toml_string_single(rep_val)}'{rep_comment}")
             new_content.append(f"searchStr = '{self.escape_toml_string_single(org_val)}'{org_comment}")
             
-            # 附加块内其他行（如注释）
             if other_lines:
                 new_content.extend(other_lines)
 
         return "\n".join(new_content)
-
-    # #####################################################################
             
     def open_file(self):
         file_path = filedialog.askopenfilename(
@@ -882,7 +986,7 @@ class GPTDictConverter:
             if detected_format:
                 self.input_format.set(detected_format)
             else:
-                self.input_format.set("自动检测") # 如果识别失败，重置为自动检测
+                self.input_format.set("自动检测")
             self.status_var.set(f"已打开文件: {os.path.basename(file_path)}")
             self._update_all_highlights(self.input_text)
         except Exception as e:
@@ -901,7 +1005,6 @@ class GPTDictConverter:
                 parent=self.root
             ):
                 try:
-                    # 使用 get("1.0", "end-1c") 来避免写入额外的换行符
                     with open(self.current_file_path, 'w', encoding='utf-8') as f:
                         f.write(self.input_text.get("1.0", "end-1c"))
                     self.status_var.set(f"文件已覆盖保存: {os.path.basename(self.current_file_path)}")
@@ -925,7 +1028,6 @@ class GPTDictConverter:
             self.output_format.set(target_format)
             self.convert()
 
-            # 如果原始选择是“自动检测”，转换后恢复，避免锁定到检测到的格式
             if original_input_format == "自动检测":
                 self.input_format.set("自动检测")
 
@@ -934,13 +1036,13 @@ class GPTDictConverter:
             self.output_text.config(state=tk.DISABLED)
 
             if output_for_saving:
-                self.save_file() # 调用保存输出的函数，弹出另存为对话框
+                self.save_file()
             else:
                 self.status_var.set("转换后无内容可保存。")
 
     def save_file(self):
         self.output_text.config(state=tk.NORMAL)
-        output_content = self.output_text.get("1.e", tk.END).strip()
+        output_content = self.output_text.get("1.0", tk.END).strip()
         self.output_text.config(state=tk.DISABLED)
         if not output_content:
             messagebox.showwarning("警告", "没有内容可保存")
