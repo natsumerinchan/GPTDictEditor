@@ -1063,21 +1063,27 @@ class GPTDictConverter:
         if not output_content:
             messagebox.showwarning("警告", "没有内容可保存")
             return
-            
+
         output_format_display = self.output_format.get()
         format_key = self.get_format_key(output_format_display, display_name=True)
         default_ext = FORMAT_DEFINITIONS.get(format_key, {}).get("ext", ".txt")
-        
+
+        initialfile = None
+        if self.current_file_path:
+            base = os.path.splitext(os.path.basename(self.current_file_path))[0]
+            initialfile = base + default_ext
+
         file_path = filedialog.asksaveasfilename(
             title="保存输出内容",
             initialdir=self.last_directory,
             defaultextension=default_ext,
-            filetypes=[(f"{output_format_display}", f"*{default_ext}"), ("所有文件", "*.*")]
+            filetypes=[(f"{output_format_display}", f"*{default_ext}"), ("所有文件", "*.*")],
+            initialfile=initialfile
         )
         if not file_path:
             self.status_var.set("保存已取消")
             return
-            
+
         try:
             with open(file_path, 'w', encoding='utf-8') as f: f.write(output_content)
             self.last_directory = os.path.dirname(file_path)
