@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD010 -->
 # GPTDictEditor
 
 本项目用于编写Galgame AI翻译时所用的项目GPT字典，支持  
@@ -27,7 +28,7 @@ git clone https://github.com/natsumerinchan/GPTDictEditor.git
 cd .\GPTDictEditor
 ```
 
-### 3、运行脚本
+### 4、运行脚本
 
 ```cmd
 python .\GPTDictEditor.py
@@ -35,7 +36,7 @@ python .\GPTDictEditor.py
 
 或双击运行`GPTDictEditor.bat`
 
-### 详细使用教程
+### 5、详细使用教程
 
 [help.md](./help.md)
 
