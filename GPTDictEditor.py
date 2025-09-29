@@ -658,7 +658,7 @@ class GPTDictConverter:
         
         # 自动转换选项
         self.auto_convert_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(button_frame, text="自动转换", variable=self.auto_convert_var).pack(pady=5)
+        ttk.Checkbutton(button_frame, text="打开文件时自动转换", variable=self.auto_convert_var).pack(pady=5)
         
         # --- 内容编辑区 ---
         content_frame = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
@@ -767,7 +767,7 @@ class GPTDictConverter:
         if self.highlight_job:
             self.root.after_cancel(self.highlight_job)
         self.highlight_job = self.root.after(HIGHLIGHT_DELAY_MS, lambda: self._update_all_highlights(widget))
-        self.auto_convert()
+        # 手动编辑时不再自动转换
         
     def _on_selection_change(self, event=None):
         # 动态获取触发事件的控件
@@ -787,7 +787,7 @@ class GPTDictConverter:
         if self.current_file_path:
             self.current_file_path = None
             self.status_var.set("输入格式已更改，文件关联已重置。")
-        self.auto_convert()
+        # 下拉变更时不再自动转换
         self._update_all_highlights(self.input_text)
 
     # -------------------------------------------------------------
