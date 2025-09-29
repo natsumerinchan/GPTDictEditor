@@ -14,13 +14,9 @@ except ImportError:
 try:
     import toml
 except ImportError:
-    # 如果 toml 缺失，但 tkinter 存在，则用弹窗提示
     root = tk.Tk()
-    root.withdraw()  # 隐藏主窗口
-    messagebox.showerror(
-        "缺少依赖",
-        "错误：缺少 'toml' 包。\n\n请在命令行运行以下命令进行安装：\npip install toml"
-    )
+    root.withdraw()
+    messagebox.showerror("缺少依赖", "错误：缺少 'toml' 包。\n\n请在命令行运行以下命令进行安装：\npip install toml")
     sys.exit(1)
 
 try:
@@ -28,12 +24,17 @@ try:
 except ImportError:
     root = tk.Tk()
     root.withdraw()
-    messagebox.showerror(
-        "缺少依赖",
-        "错误: 缺少 'tkinterdnd2' 包。\n此包用于实现拖放文件功能。\n\n请在命令行运行以下命令进行安装:\npip install tkinterdnd2"
-    )
+    messagebox.showerror("缺少依赖", "错误: 缺少 'tkinterdnd2' 包。\n此包用于实现拖放文件功能。\n\n请在命令行运行以下命令进行安装:\npip install tkinterdnd2")
     sys.exit(1)
 
+try:
+    from tkhtmlview import HTMLScrolledText
+    import markdown
+except ImportError:
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror("缺少依赖", "错误: 缺少 'tkhtmlview' 或 'markdown' 包。\n这些包用于显示格式化的帮助信息。\n\n请在命令行运行以下命令进行安装:\npip install tkhtmlview markdown")
+    sys.exit(1)
 
 # #####################################################################
 # 2. 导入其他必要的模块
@@ -44,9 +45,25 @@ import os
 import re
 import webbrowser
 import tkinter.font as tkFont
+from typing import Optional, List, Dict, Any, Tuple
 
 # #####################################################################
-# 新增: 带行号的自定义编辑器组件
+# 3. 全局常量定义
+# #####################################################################
+APP_VERSION = "v1.1.0"
+HIGHLIGHT_DELAY_MS = 250  # 语法高亮延迟时间
+
+# 统一管理格式定义，方便扩展
+FORMAT_DEFINITIONS = {
+    "AiNiee_JSON": {"name": "AiNiee/LinguaGacha JSON格式", "ext": ".json"},
+    "GPPGUI_TOML": {"name": "GalTranslPP GUI TOML格式", "ext": ".toml"},
+    "GPPCLI_TOML": {"name": "GalTranslPP CLI TOML格式", "ext": ".toml"},
+    "GalTransl_TSV": {"name": "GalTransl TSV格式", "ext": ".txt"},
+}
+
+
+# #####################################################################
+# 4. 带行号的自定义编辑器组件
 # #####################################################################
 class EditorWithLineNumbers(tk.Frame):
     def __init__(self, master, *args, **kwargs):
@@ -68,48 +85,48 @@ class EditorWithLineNumbers(tk.Frame):
 
         self.text = tk.Text(self, undo=True, wrap=tk.NONE, *args, **kwargs)
         self.text.grid(row=0, column=1, sticky="nsew")
-
+        
         self.text.config(yscrollcommand=self.on_text_scroll, xscrollcommand=self.hbar.set)
         self.hbar.config(command=self.text.xview)
 
+        # 绑定 <<Modified>> 事件来追踪变化
         self.text.bind("<<Modified>>", self._on_change_proxy)
         self.text.bind("<Configure>", self._on_change_proxy)
-        self.text.bind("<KeyRelease>", self._on_change_proxy)
-        self.text.bind("<ButtonRelease-1>", self._on_change_proxy)
 
         self._redraw_job = None
-        self.text.edit_modified(False)
+        self.is_modified_flag = False
 
     def on_text_scroll(self, first, last):
         self.vbar.set(first, last)
         self.linenumbers.yview_moveto(first)
-        self._on_change_proxy()
+        self.redraw_line_numbers()
 
     def yview(self, *args):
         self.text.yview(*args)
         self.linenumbers.yview(*args)
-        self._on_change_proxy()
+        self.redraw_line_numbers()
         return "break"
 
     def _on_change_proxy(self, event=None):
+        if self.text.edit_modified():
+            self.is_modified_flag = True
+            self.text.edit_modified(False) # 必须重置，否则事件不会再次触发
+
+        # 延迟重绘行号以优化性能
         if self._redraw_job:
             self.after_cancel(self._redraw_job)
-        self._redraw_job = self.after(20, self.redraw_line_numbers)
-        
-        if self.text.edit_modified():
-            self.text.edit_modified(False)
+        self._redraw_job = self.after(50, self.redraw_line_numbers)
 
     def redraw_line_numbers(self):
         self.linenumbers.delete("all")
-
         try:
             total_lines_str = self.text.index('end-1c').split('.')[0]
             line_count = int(total_lines_str) if total_lines_str else 1
-            new_width = 20 + len(total_lines_str) * 8
+            new_width = 25 + len(total_lines_str) * 8
             if self.linenumbers.winfo_width() != new_width:
                 self.linenumbers.config(width=new_width)
 
-            current_line = self.text.index(tk.INSERT).split('.')[0]
+            current_line_num = self.text.index(tk.INSERT).split('.')[0]
             
             i = self.text.index("@0,0")
             while True:
@@ -117,32 +134,38 @@ class EditorWithLineNumbers(tk.Frame):
                 if dline is None: break
                 
                 y = dline[1]
-                linenum = i.split('.')[0]
-                
-                color = "#1e1e1e" if linenum == current_line else "#858585"
-
-                self.linenumbers.create_text(
-                    new_width - 5, y, anchor=tk.NE, text=linenum,
-                    fill=color, font=self.text_font
-                )
+                linenum_str = i.split('.')[0]
+                color = "#1e1e1e" if linenum_str == current_line_num else "#858585"
+                self.linenumbers.create_text(new_width - 8, y, anchor=tk.NE, text=linenum_str, fill=color, font=self.text_font)
                 i = self.text.index(f"{i}+1line")
         except (tk.TclError, ValueError):
             pass
 
+    def get_content(self) -> str:
+        return self.text.get("1.0", "end-1c")
+
+    def set_content(self, content: str, reset_modified_flag: bool = True):
+        is_disabled = self.text.cget("state") == tk.DISABLED
+        if is_disabled: self.text.config(state=tk.NORMAL)
+        self.text.delete("1.0", tk.END)
+        self.text.insert("1.0", content)
+        if reset_modified_flag:
+            self.text.edit_reset()
+            self.is_modified_flag = False
+        if is_disabled: self.text.config(state=tk.DISABLED)
+
+    def clear(self):
+        self.set_content("", reset_modified_flag=True)
+
     def config(self, cnf=None, **kw):
         all_options = (cnf or {}).copy()
         all_options.update(kw)
-        
         text_keys = tk.Text().keys()
         text_kw = {k: v for k, v in all_options.items() if k in text_keys}
         frame_kw = {k: v for k, v in all_options.items() if k not in text_keys}
-            
-        if 'font' in text_kw:
-            self.text_font = text_kw['font']
-        
+        if 'font' in text_kw: self.text_font = text_kw['font']
         super().config(**frame_kw)
-        if text_kw:
-            self.text.config(**text_kw)
+        if text_kw: self.text.config(**text_kw)
 
     def __getattr__(self, name):
         try:
@@ -152,7 +175,7 @@ class EditorWithLineNumbers(tk.Frame):
 
 
 # #####################################################################
-# 查找与替换对话框类
+# 5. 对话框类 (FindReplaceDialog, GoToLineDialog)
 # #####################################################################
 class FindReplaceDialog(tk.Toplevel):
     def __init__(self, master, target_widget, app_instance):
@@ -162,9 +185,7 @@ class FindReplaceDialog(tk.Toplevel):
         self.target = target_widget
         self.app = app_instance
         self.master = master
-
         self.match_len_var = tk.StringVar()
-
         self.create_widgets()
         self.protocol("WM_DELETE_WINDOW", self.close_dialog)
 
@@ -199,29 +220,18 @@ class FindReplaceDialog(tk.Toplevel):
         self.target.tag_remove('found', '1.0', tk.END)
         find_str = self.find_entry.get()
         if not find_str: return
-
         try:
             start_pos = self.target.index(tk.SEL_FIRST) if backwards else self.target.index(tk.SEL_LAST)
         except tk.TclError:
             start_pos = self.target.index(tk.INSERT)
-
-        common_kwargs = {
-            "nocase": not self.case_var.get(), 
-            "regexp": self.regex_var.get(),
-            "count": self.match_len_var
-        }
-        
+        common_kwargs = {"nocase": not self.case_var.get(), "regexp": self.regex_var.get(), "count": self.match_len_var}
         pos = self.target.search(find_str, start_pos, stopindex="1.0" if backwards else tk.END, backwards=backwards, **common_kwargs)
         if not pos:
             wrap_pos = tk.END if backwards else "1.0"
-            stop_index = start_pos
-            pos = self.target.search(find_str, wrap_pos, stopindex=stop_index, backwards=backwards, **common_kwargs)
+            pos = self.target.search(find_str, wrap_pos, stopindex=start_pos, backwards=backwards, **common_kwargs)
             if pos: messagebox.showinfo("提示", "已回绕搜索。", parent=self)
-
         if pos:
-            match_length = self.match_len_var.get()
-            end_pos = f"{pos} + {match_length}c"
-            
+            end_pos = f"{pos} + {self.match_len_var.get()}c"
             self._highlight_match(pos, end_pos)
             self.target.mark_set(tk.INSERT, end_pos if not backwards else pos)
         else:
@@ -235,42 +245,30 @@ class FindReplaceDialog(tk.Toplevel):
         self.target.see(start_pos)
         self.target.focus_set()
 
-    def _find_driver(self, direction):
-        self._perform_find(backwards=(direction == -1))
-
-    def find_next(self): self._find_driver(1)
-    def find_previous(self): self._find_driver(-1)
+    def find_next(self): self._perform_find(backwards=False)
+    def find_previous(self): self._perform_find(backwards=True)
 
     def replace(self):
         try:
-            sel_start = self.target.index(tk.SEL_FIRST)
-            sel_end = self.target.index(tk.SEL_LAST)
+            sel_start, sel_end = self.target.index(tk.SEL_FIRST), self.target.index(tk.SEL_LAST)
         except tk.TclError:
             self.find_next()
             return
-
-        replace_text = self.replace_entry.get()
         self.target.edit_separator()
         self.target.delete(sel_start, sel_end)
-        self.target.insert(sel_start, replace_text)
+        self.target.insert(sel_start, self.replace_entry.get())
         self.target.edit_separator()
         self.find_next()
 
     def replace_all(self):
         find_text = self.find_entry.get()
         if not find_text: return
-        
-        self.app.replace_all(
-            target_widget=self.target, find_text=find_text, replace_text=self.replace_entry.get(),
-            use_regex=self.regex_var.get(), case_sensitive=self.case_var.get())
+        self.app.replace_all(target_widget=self.target, find_text=find_text, replace_text=self.replace_entry.get(), use_regex=self.regex_var.get(), case_sensitive=self.case_var.get())
 
     def close_dialog(self):
         self.target.tag_remove('found', '1.0', tk.END)
         self.destroy()
 
-# #####################################################################
-# 新增: 转到行对话框
-# #####################################################################
 class GoToLineDialog(tk.Toplevel):
     def __init__(self, master, app_instance):
         super().__init__(master)
@@ -318,15 +316,17 @@ class GoToLineDialog(tk.Toplevel):
             messagebox.showerror("错误", "请输入一个有效的数字。", parent=self)
             return
 
-        total_lines = int(target_widget.index('end-1c').split('.')[0])
+        total_lines_str = target_widget.index('end-1c').split('.')[0]
+        total_lines = int(total_lines_str) if total_lines_str else 0
         if not (1 <= line_num <= total_lines):
             messagebox.showerror("错误", f"行号必须在 1 到 {total_lines} 之间。", parent=self)
             return
 
+        # 所有 state 操作都必须明确指向内部的 .text 组件
         was_disabled = (target_widget.text.cget("state") == tk.DISABLED)
         
         if was_disabled:
-            target_widget.config(state=tk.NORMAL)
+            target_widget.text.config(state=tk.NORMAL)
 
         for widget in [self.app.input_text, self.app.output_text]:
             widget.tag_remove("goto_line", "1.0", tk.END)
@@ -337,162 +337,657 @@ class GoToLineDialog(tk.Toplevel):
         target_widget.focus_set()
 
         if was_disabled:
-            target_widget.config(state=tk.DISABLED)
+            # [最终修正] 延迟操作同样要指向 .text 组件
+            target_widget.after(100, lambda: target_widget.text.config(state=tk.DISABLED))
 
         self.destroy()
-
+        
 # #####################################################################
-# 主应用程序类
+# 6. 主应用程序类
 # #####################################################################
 class GPTDictConverter:
-    def __init__(self, root):
+    def __init__(self, root: TkinterDnD.Tk):
         self.root = root
-        self.version = "v1.0.4"
-        self.root.title(f"GPT字典编辑转换器   {self.version}")
+        self.root.title(f"GPT字典编辑转换器   {APP_VERSION}")
         self.root.geometry("1000x600")
-        self.current_file_path = None
+        self.root.protocol("WM_DELETE_WINDOW", self.ask_quit) # [新增] 退出时检查
         
-        self.format_names = {
-            "AiNiee_JSON": "AiNiee/LinguaGacha JSON格式",
-            "GPPGUI_TOML": "GalTranslPP GUI TOML格式", 
-            "GPPCLI_TOML": "GalTranslPP CLI TOML格式",
-            "GalTransl_TSV": "GalTransl TSV格式"
-        }
+        self.current_file_path: Optional[str] = None
+        self.last_directory: str = os.path.expanduser("~") # [新增] 记忆目录
+
+        self.format_names = {k: v["name"] for k, v in FORMAT_DEFINITIONS.items()}
         
         self._create_menu()
-
-        main_frame = ttk.Frame(root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self._create_widgets()
+        self._setup_editor_features()
         
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(0, weight=1)
+    def _create_widgets(self):
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.grid(row=0, column=0, sticky="nsew")
+        
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
         main_frame.rowconfigure(1, weight=1)
         
+        # --- 顶部控制区 ---
         top_control_frame = ttk.Frame(main_frame)
-        top_control_frame.grid(row=0, column=0, columnspan=3, pady=5, sticky=tk.N)
+        top_control_frame.grid(row=0, column=0, columnspan=2, pady=5, sticky="ew")
         
         format_frame = ttk.Frame(top_control_frame)
         format_frame.pack(side=tk.LEFT, padx=10)
         
-        ttk.Label(format_frame, text="输入格式:").pack(anchor=tk.W, pady=2)
-        self.input_format = ttk.Combobox(format_frame, values=["自动检测"] + list(self.format_names.values()), 
-                                      state="readonly", width=25)
+        ttk.Label(format_frame, text="输入格式:").pack(anchor=tk.W)
+        self.input_format = ttk.Combobox(format_frame, values=["自动检测"] + list(self.format_names.values()), state="readonly", width=25)
         self.input_format.set("自动检测")
         self.input_format.pack(pady=2)
         self.input_format.bind("<<ComboboxSelected>>", self._on_input_format_change)
         
         ttk.Label(format_frame, text="输出格式:").pack(anchor=tk.W, pady=2)
-        self.output_format = ttk.Combobox(format_frame, values=list(self.format_names.values()), 
-                                       state="readonly", width=25)
-        self.output_format.set("GalTranslPP GUI TOML格式")
+        self.output_format = ttk.Combobox(format_frame, values=list(self.format_names.values()), state="readonly", width=25)
+        self.output_format.set(self.format_names["GPPGUI_TOML"])
         self.output_format.pack(pady=2)
-        
-        button_frame = ttk.Frame(top_control_frame)
-        button_frame.pack(side=tk.LEFT, padx=20)
-        
-        ttk.Button(button_frame, text="打开文件", command=self.open_file).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="保存输入内容", command=self.save_input_file).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="保存输出内容", command=self.save_file).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="转换", command=self.convert).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="清空", command=self.clear).pack(side=tk.LEFT, padx=5)
-        
-        content_frame = ttk.Frame(main_frame)
-        content_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
-        content_frame.columnconfigure(0, weight=1)
-        content_frame.columnconfigure(2, weight=1)
-        content_frame.rowconfigure(0, weight=1)
+        self.output_format.bind("<<ComboboxSelected>>", lambda e: self.auto_convert())
 
-        input_frame = ttk.Frame(content_frame)
-        input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        button_frame = ttk.Frame(top_control_frame)
+        button_frame.pack(side=tk.LEFT, padx=20, anchor='n')
         
-        ttk.Label(input_frame, text="输入内容 (可拖入文件):").pack(anchor=tk.W, pady=5)
-        self.input_text = EditorWithLineNumbers(
-            input_frame,
-            selectbackground="black", selectforeground="white",
-            borderwidth=1, relief="solid",
-            highlightthickness=1, highlightbackground="#c0c0c0"
-        )
+        btn_grid = ttk.Frame(button_frame)
+        btn_grid.pack()
+        ttk.Button(btn_grid, text="打开文件", command=self.open_file).grid(row=0, column=0, padx=5, pady=2)
+        ttk.Button(btn_grid, text="保存输入", command=self.save_input_file).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Button(btn_grid, text="保存输出", command=self.save_output_file).grid(row=0, column=2, padx=5, pady=2)
+        ttk.Button(btn_grid, text="转换", command=self.convert).grid(row=1, column=0, padx=5, pady=2)
+        ttk.Button(btn_grid, text="清空", command=self.clear).grid(row=1, column=1, padx=5, pady=2)
+        
+        # 自动转换选项
+        self.auto_convert_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(button_frame, text="自动转换", variable=self.auto_convert_var).pack(pady=5)
+        
+        # --- 内容编辑区 ---
+        content_frame = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
+        content_frame.grid(row=1, column=0, columnspan=2, sticky="nsew")
+
+        input_pane = ttk.Frame(content_frame)
+        input_header = ttk.Frame(input_pane)
+        input_header.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(input_header, text="输入内容 (可拖入文件):").pack(side=tk.LEFT, anchor=tk.W)
+        ttk.Button(input_header, text="复制", command=self.copy_input).pack(side=tk.LEFT, padx=10)
+        self.input_text = EditorWithLineNumbers(input_pane, borderwidth=1, relief="solid")
         self.input_text.pack(expand=True, fill=tk.BOTH)
-        
-        # ### 新增: 注册拖放目标 ###
         self.input_text.drop_target_register(DND_FILES)
         self.input_text.dnd_bind('<<Drop>>', self.on_drop)
-
-        transfer_frame = ttk.Frame(content_frame)
-        transfer_frame.grid(row=0, column=1, sticky=tk.N)
-        ttk.Button(transfer_frame, text="←", command=self.transfer_output_to_input, width=2).pack(pady=0, fill=tk.Y, expand=True)
-
-        output_frame = ttk.Frame(content_frame)
-        output_frame.grid(row=0, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         
-        output_header_frame = ttk.Frame(output_frame)
-        output_header_frame.pack(fill=tk.X)
-        ttk.Label(output_header_frame, text="输出内容:").pack(side=tk.LEFT)
-        ttk.Button(output_header_frame, text="复制", command=self.copy_output).pack(side=tk.LEFT, padx=10)
-        
-        self.output_text = EditorWithLineNumbers(
-            output_frame, state=tk.DISABLED,
-            selectbackground="black", selectforeground="white",
-            borderwidth=1, relief="solid",
-            highlightthickness=1, highlightbackground="#c0c0c0"
-        )
+        output_pane = ttk.Frame(content_frame)
+        output_header = ttk.Frame(output_pane)
+        output_header.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(output_header, text="输出内容:").pack(side=tk.LEFT, anchor=tk.W)
+        ttk.Button(output_header, text="复制", command=self.copy_output).pack(side=tk.LEFT, padx=10)
+        ttk.Button(output_header, text="传至输入栏", command=self.transfer_output_to_input).pack(side=tk.LEFT)
+        self.output_text = EditorWithLineNumbers(output_pane, state=tk.DISABLED, borderwidth=1, relief="solid")
         self.output_text.pack(expand=True, fill=tk.BOTH)
-        
-        self.status_var = tk.StringVar(value="就绪")
-        status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN)
-        status_bar.grid(row=7, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
 
-        self._setup_editor_features()
+        content_frame.add(input_pane, weight=1)
+        content_frame.add(output_pane, weight=1)
+        
+        # --- 状态栏 ---
+        self.status_var = tk.StringVar(value="就绪")
+        ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5, 0))
+
+    def _setup_editor_features(self):
+        # 共享编辑器样式
+        editor_style = {
+            "font": ("Consolas", 10), "background": "#FFFFFF", "foreground": "#000000",
+            "insertbackground": "black", "selectbackground": "#ADD6FF", "selectforeground": "black",
+            "inactiveselectbackground": "#E5E5E5", "insertwidth": 2, "padx": 5, "pady": 5,
+        }
+        self.input_text.config(**editor_style)
+        self.output_text.config(**editor_style)
+
+        # 统一配置标签颜色
+        tag_colors = {
+            "key": "#0000FF", "string": "#A31515", "punc": "#000000", "number": "#098658",
+            "comment": "#008000", "tsv_tab": {"background": "#E0E8F0"},
+            "tsv_space_delimiter": {"background": "#E0E8F0"},
+            "highlight_duplicate": {"background": "#B4D5FF"},
+            "found": {"background": "#FFD700"},
+            "goto_line": {"background": "#FFFACD"},
+        }
+        
+        # 循环处理每个文本框独立的事件绑定
+        widgets = [self.input_text, self.output_text]
+        for widget in widgets:
+            # 应用标签配置
+            for tag, props in tag_colors.items():
+                if isinstance(props, dict):
+                    widget.tag_configure(tag, **props)
+                else:
+                    widget.tag_configure(tag, foreground=props)
+            
+            # 为每个文本框的内部Text组件绑定划词高亮事件
+            widget.text.bind("<<Selection>>", self._on_selection_change)
+
+        # 只对输入框绑定修改和注释相关的事件
+        self.input_text.text.bind("<KeyRelease>", self._on_text_change)
+        self.input_text.text.bind("<Control-slash>", self._toggle_comment)
+            
+        # 将全局快捷键绑定到顶层窗口，确保任何时候都能触发
+        self.root.bind_all("<Control-f>", self._show_find_replace_dialog)
+        self.root.bind_all("<Control-g>", self._show_goto_line_dialog)
+            
+        self.highlight_job = None
+        
+    def _create_menu(self):
+        self.menu_bar = tk.Menu(self.root)
+        self.root.config(menu=self.menu_bar)
+        edit_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.menu_bar.add_cascade(label="编辑", menu=edit_menu)
+        edit_menu.add_command(label="查找与替换 (Ctrl+F)", command=self._show_find_replace_dialog)
+        edit_menu.add_command(label="转到行... (Ctrl+G)", command=self._show_goto_line_dialog)
+        help_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.menu_bar.add_cascade(label="帮助", menu=help_menu)
+        help_menu.add_command(label="使用教程", command=self._show_help_dialog)
+        about_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.menu_bar.add_cascade(label="关于", menu=about_menu)
+        about_menu.add_command(label="关于本软件", command=self._show_about_dialog)
+
+    def ask_quit(self):
+        if self.input_text.is_modified_flag:
+            if messagebox.askyesno("退出确认", "输入内容已被修改但未保存，确定要退出吗？"):
+                self.root.destroy()
+        else:
+            self.root.destroy()
+
+    def auto_convert(self, event=None):
+        if self.auto_convert_var.get():
+            self.convert()
+
+    # -------------------------------------------------------------
+    # 核心事件处理
+    # -------------------------------------------------------------
+    def _on_text_change(self, event=None):
+        widget = self.input_text
+        widget.tag_remove("goto_line", "1.0", tk.END)
+        if self.highlight_job:
+            self.root.after_cancel(self.highlight_job)
+        self.highlight_job = self.root.after(HIGHLIGHT_DELAY_MS, lambda: self._update_all_highlights(widget))
+        self.auto_convert()
+        
+    def _on_selection_change(self, event=None):
+        # 动态获取触发事件的控件
+        if not event: return
+
+        # event.widget 是内部的 tk.Text 组件，我们需要找到它的 EditorWithLineNumbers 父容器
+        source_widget = event.widget
+        parent_editor = source_widget
+        while parent_editor and not isinstance(parent_editor, EditorWithLineNumbers):
+            parent_editor = parent_editor.master
+        
+        # 如果找到了父容器，就对它执行高亮操作
+        if parent_editor:
+            self._highlight_duplicates_on_selection(parent_editor)
         
     def _on_input_format_change(self, event=None):
         if self.current_file_path:
             self.current_file_path = None
             self.status_var.set("输入格式已更改，文件关联已重置。")
+        self.auto_convert()
+        self._update_all_highlights(self.input_text)
+
+    # -------------------------------------------------------------
+    # 语法高亮
+    # -------------------------------------------------------------
+    def _update_all_highlights(self, widget: EditorWithLineNumbers):
+        self._apply_syntax_highlighting(widget)
+        self._highlight_duplicates_on_selection(widget)
+
+    def _get_active_format_key(self, widget: EditorWithLineNumbers) -> Optional[str]:
+        content = widget.get_content()
+        if widget == self.input_text:
+            format_name = self.input_format.get()
+            if format_name == "自动检测":
+                detected = self.detect_format(content)
+                return self.get_format_key(detected, display_name=True) if detected else None
+            return self.get_format_key(format_name, display_name=True)
+        else: # output_text
+            return self.get_format_key(self.output_format.get(), display_name=True)
+    
+    def _apply_syntax_highlighting(self, widget: EditorWithLineNumbers):
+        all_tags = ["key", "string", "punc", "number", "comment", "tsv_tab", "tsv_space_delimiter"]
+        for tag in all_tags:
+            widget.tag_remove(tag, "1.0", tk.END)
         
+        format_key = self._get_active_format_key(widget)
+        if not format_key: return
+        
+        content = widget.get_content()
+        
+        # 将词法规则分离，避免命名冲突
+        token_specs = {
+            # 基础规则，适用于 TOML 和 JSON
+            'BASE': [
+                ('COMMENT', r'#.*$'),
+                ('STRING', r'"([^"\\]*(?:\\.[^"\\]*)*)"'),
+                ('PUNC', r'[\[\]{},=:]'),
+            ],
+            # 专用于 TOML 的关键字规则
+            'GPPGUI_TOML': [('KEY', r'\b(org|rep|note)\b(?=\s*=)')],
+            'GPPCLI_TOML': [('KEY', r'\b(note|replaceStr|searchStr)\b(?=\s*=)')],
+            # 专用于 JSON 的关键字规则
+            'AiNiee_JSON': [('KEY', r'"(srt|dst|info)"(?=\s*:)')],
+            # TSV 格式的完整独立规则
+            'GalTransl_TSV': [
+                ('COMMENT', r'//.*$'),
+                ('TSV_TAB', r'\t'),
+                ('TSV_SPACE_DELIMITER', r'(?<=\S) {4}(?=\S)'),
+                # TSV中也可能有字符串，但我们通常不特殊高亮它们，除非有需求
+            ]
+        }
+        
+        # 根据格式选择正确的规则集
+        if format_key == 'GalTransl_TSV':
+            # TSV 使用它自己独立的规则集
+            current_specs = token_specs['GalTransl_TSV']
+        else:
+            # 其他格式使用基础规则集，并附加上它们特有的规则
+            current_specs = token_specs['BASE'] + token_specs.get(format_key, [])
+
+        # 组合正则表达式
+        # try-except 用于捕获任何潜在的正则表达式编译错误
+        try:
+            tok_regex = '|'.join('(?P<%s>%s)' % pair for pair in current_specs)
+        except re.error as e:
+            print(f"正则表达式编译错误: {e}")
+            # 可以在状态栏提示用户，或者弹窗
+            self.status_var.set(f"语法高亮错误: {e}")
+            return
+        
+        for mo in re.finditer(tok_regex, content, re.MULTILINE):
+            kind = mo.lastgroup
+            start, end = f"1.0 + {mo.start()} chars", f"1.0 + {mo.end()} chars"
+            
+            tag_map = {
+                'KEY': 'key', 'STRING': 'string', 'PUNC': 'punc', 'NUMBER': 'number',
+                'COMMENT': 'comment', 'TSV_TAB': 'tsv_tab', 'TSV_SPACE_DELIMITER': 'tsv_space_delimiter'
+            }
+            if kind in tag_map:
+                # JSON的key包含引号，特殊处理以仅高亮引号内的文本
+                if format_key == "AiNiee_JSON" and kind == 'KEY':
+                    # mo.group(1) 对应 r'"(srt|dst|info)"' 中的第一个括号
+                    key_start_offset = mo.start(1)
+                    key_end_offset = mo.end(1)
+                    if key_start_offset != -1: # 确保捕获组匹配成功
+                        key_start = f"1.0 + {key_start_offset} chars"
+                        key_end = f"1.0 + {key_end_offset} chars"
+                        widget.tag_add('key', key_start, key_end)
+                else:
+                    widget.tag_add(tag_map[kind], start, end)
+
+    def _highlight_duplicates_on_selection(self, widget: EditorWithLineNumbers):
+        widget.tag_remove("highlight_duplicate", "1.0", tk.END)
+        try:
+            selected_text = widget.get(tk.SEL_FIRST, tk.SEL_LAST)
+            if selected_text and len(selected_text.strip()) > 1:
+                start_pos = "1.0"
+                while True:
+                    start_pos = widget.search(selected_text, start_pos, stopindex=tk.END, exact=True)
+                    if not start_pos: break
+                    if start_pos == widget.index(tk.SEL_FIRST): # 不高亮选中区本身
+                        start_pos = widget.index(tk.SEL_LAST)
+                        continue
+                    end_pos = f"{start_pos} + {len(selected_text)}c"
+                    widget.tag_add("highlight_duplicate", start_pos, end_pos)
+                    start_pos = end_pos
+        except tk.TclError:
+            pass
+
+    # -------------------------------------------------------------
+    # 核心功能方法
+    # -------------------------------------------------------------
+    def convert(self):
+        try:
+            input_content = self.input_text.get_content()
+            if not input_content.strip():
+                self.output_text.clear()
+                self.status_var.set("输入为空，已清空输出。")
+                return
+
+            input_format, output_format = self.input_format.get(), self.output_format.get()
+            
+            if input_format == "自动检测":
+                detected_format_display = self.detect_format(input_content)
+                if not detected_format_display:
+                    raise ValueError("无法自动检测输入内容的格式。")
+                self.input_format.set(detected_format_display)
+                input_format = detected_format_display
+
+            format_key = self.get_format_key(input_format, display_name=True)
+            if input_format == output_format and format_key in ["GalTransl_TSV", "GPPGUI_TOML", "GPPCLI_TOML"]:
+                output_content = self._reformat_current_format(input_content, input_format)
+                status_msg = f"格式化完成: {input_format}"
+            else:
+                data = self.parse_input(input_content, input_format)
+                output_key = self.get_format_key(output_format, display_name=True)
+                output_content = self.format_output(data, output_key)
+                status_msg = f"转换完成: {input_format} → {output_format}"
+
+            self.output_text.set_content(output_content, reset_modified_flag=True)
+            self._update_all_highlights(self.output_text)
+            self.status_var.set(status_msg)
+
+        except (ValueError, json.JSONDecodeError, toml.TomlDecodeError) as e:
+            messagebox.showerror("错误", f"处理失败: {str(e)}")
+            self.status_var.set(f"处理失败: {e}")
+        except Exception as e:
+            messagebox.showerror("未知错误", f"发生未知错误: {str(e)}")
+            self.status_var.set("发生未知错误")
+    
+    def clear(self):
+        self.input_text.clear()
+        self.output_text.clear()
+        self.current_file_path = None
+        self.input_format.set("自动检测")
+        self.status_var.set("已清空")
+
     def transfer_output_to_input(self):
-        self.output_text.config(state=tk.NORMAL)
-        output_content = self.output_text.get("1.0", tk.END).strip()
-        self.output_text.config(state=tk.DISABLED)
+        output_content = self.output_text.get_content()
         if not output_content:
             self.status_var.set("输出内容为空，无法传递。")
             return
-        self.input_text.delete("1.0", tk.END)
-        self.input_text.insert("1.0", output_content)
-        current_output_format = self.output_format.get()
-        self.input_format.set(current_output_format)
+        self.input_text.set_content(output_content)
+        self.input_format.set(self.output_format.get())
         self.current_file_path = None
         self._update_all_highlights(self.input_text)
         self.status_var.set("已将输出传至输入，并同步格式。")
-        
+
+    def copy_input(self):
+        content = self.input_text.get_content()
+        if content:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(content)
+            self.status_var.set("输入内容已复制到剪贴板")
+        else:
+            self.status_var.set("输入内容为空")
+
     def copy_output(self):
-        self.output_text.config(state=tk.NORMAL)
-        content = self.output_text.get("1.0", tk.END).strip()
-        self.output_text.config(state=tk.DISABLED)
+        content = self.output_text.get_content()
         if content:
             self.root.clipboard_clear()
             self.root.clipboard_append(content)
             self.status_var.set("输出内容已复制到剪贴板")
         else:
             self.status_var.set("输出内容为空")
+    
+    # -------------------------------------------------------------
+    # 文件操作
+    # -------------------------------------------------------------
+    def on_drop(self, event):
+        file_path = event.data.strip('{}')
+        self._open_file_path(file_path)
+
+    def open_file(self):
+        file_path = filedialog.askopenfilename(
+            title="选择文件",
+            initialdir=self.last_directory,
+            filetypes=[("所有支持格式", "*.json;*.toml;*.txt"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            self.last_directory = os.path.dirname(file_path) # [改进] 记录目录
+            self._open_file_path(file_path)
+
+    def _open_file_path(self, file_path: str):
+        if not file_path: return
+        try:
+            with open(file_path, 'r', encoding='utf-8-sig') as f: content = f.read()
+            self.input_text.set_content(content, reset_modified_flag=True)
+            self.current_file_path = file_path
+            detected_format = self.detect_format(content)
+            self.input_format.set(detected_format if detected_format else "自动检测")
+            self.status_var.set(f"已打开: {os.path.basename(file_path)}")
+            self._update_all_highlights(self.input_text)
+            self.auto_convert()
+        except Exception as e:
+            messagebox.showerror("错误", f"打开文件失败: {str(e)}")
+            self.status_var.set(f"打开失败: {e}")
+
+    def save_input_file(self):
+        # 简化保存逻辑
+        content = self.input_text.get_content()
+        if not content:
+            messagebox.showwarning("警告", "输入内容为空，无法保存")
+            return
+
+        save_path = self.current_file_path
+        if not save_path:
+            input_format_name = self.input_format.get()
+            if input_format_name == "自动检测":
+                detected = self.detect_format(content)
+                if detected: input_format_name = detected
             
-    def _create_menu(self):
-        self.menu_bar = tk.Menu(self.root)
-        self.root.config(menu=self.menu_bar)
+            format_key = self.get_format_key(input_format_name, display_name=True)
+            default_ext = FORMAT_DEFINITIONS.get(format_key, {}).get("ext", ".txt")
+            
+            save_path = filedialog.asksaveasfilename(
+                title="保存输入内容",
+                initialdir=self.last_directory,
+                defaultextension=default_ext,
+                filetypes=[(f"{input_format_name}", f"*{default_ext}"), ("所有文件", "*.*")]
+            )
+        
+        if not save_path:
+            self.status_var.set("保存已取消")
+            return
+        
+        try:
+            with open(save_path, 'w', encoding='utf-8') as f: f.write(content)
+            self.last_directory = os.path.dirname(save_path)
+            self.current_file_path = save_path
+            self.input_text.edit_reset()
+            self.input_text.is_modified_flag = False
+            self.status_var.set(f"文件已保存: {os.path.basename(save_path)}")
+        except Exception as e:
+            messagebox.showerror("错误", f"保存文件失败: {str(e)}")
+            self.status_var.set("保存失败")
 
-        edit_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.menu_bar.add_cascade(label="编辑", menu=edit_menu)
-        edit_menu.add_command(label="查找与替换 (Ctrl+F)", command=self._show_find_replace_dialog)
-        edit_menu.add_command(label="转到行... (Ctrl+G)", command=self._show_goto_line_dialog)
+    def save_output_file(self):
+        output_content = self.output_text.get_content()
+        if not output_content:
+            messagebox.showwarning("警告", "没有内容可保存")
+            return
+            
+        output_format_display = self.output_format.get()
+        format_key = self.get_format_key(output_format_display, display_name=True)
+        default_ext = FORMAT_DEFINITIONS.get(format_key, {}).get("ext", ".txt")
+        
+        file_path = filedialog.asksaveasfilename(
+            title="保存输出内容",
+            initialdir=self.last_directory,
+            defaultextension=default_ext,
+            filetypes=[(f"{output_format_display}", f"*{default_ext}"), ("所有文件", "*.*")]
+        )
+        if not file_path:
+            self.status_var.set("保存已取消")
+            return
+            
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f: f.write(output_content)
+            self.last_directory = os.path.dirname(file_path)
+            self.status_var.set(f"已保存输出: {os.path.basename(file_path)}")
+        except Exception as e:
+            messagebox.showerror("错误", f"保存输出内容失败: {str(e)}")
 
-        help_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.menu_bar.add_cascade(label="帮助", menu=help_menu)
-        help_menu.add_command(label="使用教程", command=self._show_help_dialog)
+    # -------------------------------------------------------------
+    # 辅助与工具方法
+    # -------------------------------------------------------------
+    def _toggle_comment(self, event):
+        widget = event.widget
+        format_key = self._get_active_format_key(self.input_text)
+        comment_char = {"GPPGUI_TOML": "#", "GPPCLI_TOML": "#", "GalTransl_TSV": "//"}.get(format_key)
+        if not comment_char: return "break"
+        
+        # 采用更可靠的方式来确定选中的行范围
+        try:
+            sel_start_index = widget.index(tk.SEL_FIRST)
+            sel_end_index = widget.index(tk.SEL_LAST)
+            
+            start_line = int(sel_start_index.split('.')[0])
+            end_line = int(sel_end_index.split('.')[0])
+            
+            # 如果选区的结尾在第0列，说明用户选中了之前行的完整内容（包括换行符），
+            # 这种情况下不应处理结尾索引所在的新行。
+            end_col = int(sel_end_index.split('.')[1])
+            if end_col == 0:
+                end_line -= 1
+        except tk.TclError:
+            # 如果没有选区，则只处理光标当前所在的行
+            start_line = end_line = int(widget.index(tk.INSERT).split('.')[0])
+        
+        # 确保行号有效
+        if end_line < start_line:
+            return "break"
 
-        about_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.menu_bar.add_cascade(label="关于", menu=about_menu)
-        about_menu.add_command(label="关于本软件", command=self._show_about_dialog)
+        widget.edit_separator()
+        lines = [widget.get(f"{i}.0", f"{i}.end") for i in range(start_line, end_line + 1)]
+        non_empty_lines = [line for line in lines if line.strip()]
+        if not non_empty_lines:
+            widget.edit_separator()
+            return "break"
+        
+        all_commented = all(line.strip().startswith(comment_char) for line in non_empty_lines)
+
+        for i in range(start_line, end_line + 1):
+            line_content = widget.get(f"{i}.0", f"{i}.end")
+            if all_commented:
+                # 取消注释
+                if line_content.strip():
+                    idx = line_content.find(comment_char)
+                    if idx != -1:
+                        # 检查注释符后面是否跟了一个空格，有则一起删除
+                        if line_content[idx+len(comment_char):].startswith(' '):
+                            widget.delete(f"{i}.{idx}", f"{i}.{idx + len(comment_char) + 1}")
+                        else:
+                            widget.delete(f"{i}.{idx}", f"{i}.{idx + len(comment_char)}")
+            elif line_content.strip():
+                # 添加注释
+                widget.insert(f"{i}.0", f"{comment_char} ")
+        widget.edit_separator()
+        self._update_all_highlights(self.input_text)
+        return "break"
+    
+    def replace_all(self, target_widget: EditorWithLineNumbers, find_text: str, replace_text: str, use_regex: bool, case_sensitive: bool):
+        content = target_widget.get_content()
+        total_count = 0
+        try:
+            if use_regex:
+                flags = 0 if case_sensitive else re.IGNORECASE
+                new_content, total_count = re.subn(find_text, replace_text, content, flags=flags)
+            else:
+                if not case_sensitive:
+                    # 高效的不区分大小写替换
+                    flags = re.IGNORECASE
+                    new_content, total_count = re.subn(re.escape(find_text), replace_text, content, flags=flags)
+                else:
+                    total_count = content.count(find_text)
+                    new_content = content.replace(find_text, replace_text)
+        except re.error as e:
+            messagebox.showerror("正则表达式错误", str(e))
+            return
+
+        if total_count > 0:
+            target_widget.set_content(new_content)
+            self._update_all_highlights(target_widget)
+            self.status_var.set(f"已完成 {total_count} 处替换。")
+            messagebox.showinfo("成功", f"已完成 {total_count} 处替换。")
+        else:
+            messagebox.showinfo("提示", "未找到可替换的内容。")
+
+    def get_format_key(self, name: str, display_name: bool = False) -> Optional[str]:
+        if display_name:
+            for key, value in self.format_names.items():
+                if value == name: return key
+        return name if name in self.format_names else None
+        
+    def detect_format(self, content: str) -> Optional[str]:
+        content = content.strip()
+        if not content: return None
+        if any(line.strip().startswith('//') or '\t' in line or re.search(r'\S {4}\S', line) for line in content.split('\n') if not line.strip().startswith("#")):
+            return self.format_names["GalTransl_TSV"]
+        if 'gptDict' in content or '[[gptDict]]' in content:
+            try:
+                toml.loads(content)
+                if '[[gptDict]]' in content: return self.format_names["GPPCLI_TOML"]
+                return self.format_names["GPPGUI_TOML"]
+            except toml.TomlDecodeError: pass
+        if content.startswith('[') and content.endswith(']'):
+            try:
+                data = json.loads(content)
+                if isinstance(data, list) and data and all(k in data[0] for k in ['srt', 'dst', 'info']):
+                    return self.format_names["AiNiee_JSON"]
+            except json.JSONDecodeError: pass
+        return None
+        
+    def parse_input(self, content: str, format_display_name: str) -> List[Dict[str, str]]:
+        format_key = self.get_format_key(format_display_name, display_name=True)
+        data: List[Dict[str, str]] = []
+        if content.startswith('\ufeff'): content = content[1:]
+        if not content.strip(): return []
+        
+        def parse_tsv_line(line: str) -> Optional[Dict[str, str]]:
+            line = line.strip()
+            if not line or line.startswith(('//', '#')): return None
+            parts = re.split(r'\t|(?<=\S) {4}(?=\S)', line, maxsplit=2)
+            if len(parts) >= 2:
+                return {'org': parts[0].strip(), 'rep': parts[1].strip(), 'note': parts[2].strip() if len(parts) > 2 else ''}
+            return None
+
+        if format_key == "AiNiee_JSON":
+            json_data = json.loads(content)
+            for item in json_data: data.append({'org': item.get('srt', ''), 'rep': item.get('dst', ''), 'note': item.get('info', '')})
+        elif format_key == "GPPGUI_TOML":
+            toml_data = toml.loads(content)
+            for item in toml_data.get('gptDict', []): data.append({'org': item.get('org', ''), 'rep': item.get('rep', ''), 'note': item.get('note', '')})
+        elif format_key == "GPPCLI_TOML":
+            toml_data = toml.loads(content)
+            for item in toml_data.get('gptDict', []): data.append({'org': item.get('searchStr', ''), 'rep': item.get('replaceStr', ''), 'note': item.get('note', '')})
+        elif format_key == "GalTransl_TSV":
+            for line in content.split('\n'):
+                if parsed := parse_tsv_line(line): data.append(parsed)
+        return data
+
+    def format_output(self, data: List[Dict[str, str]], format_key: str) -> str:
+        escape = lambda text: text.replace("'", "''")
+        if format_key == "AiNiee_JSON":
+            json_data = [{'srt': item['org'], 'dst': item['rep'], 'info': item['note']} for item in data]
+            return json.dumps(json_data, ensure_ascii=False, indent=2)
+        elif format_key == "GPPGUI_TOML":
+            lines = ["gptDict = ["]
+            for item in data:
+                lines.append(f"\t{{ org = '{escape(item['org'])}', rep = '{escape(item['rep'])}', note = '{escape(item['note'])}' }},")
+            lines.append("]")
+            return "\n".join(lines)
+        elif format_key == "GPPCLI_TOML":
+            return "\n\n".join([f"[[gptDict]]\nnote = '{escape(item['note'])}'\nreplaceStr = '{escape(item['rep'])}'\nsearchStr = '{escape(item['org'])}'" for item in data])
+        elif format_key == "GalTransl_TSV":
+            return "\n".join([f"{item['org']}\t{item['rep']}" + (f"\t{item['note']}" if item['note'] else "") for item in data])
+        return ""
+        
+    def _reformat_current_format(self, content: str, format_display_name: str) -> str:
+        # 相同格式转换时，重新格式化并保留注释
+        data = self.parse_input(content, format_display_name)
+        output_key = self.get_format_key(format_display_name, display_name=True)
+        return self.format_output(data, output_key)
+
+    # -------------------------------------------------------------
+    # 对话框显示
+    # -------------------------------------------------------------
+    def _show_find_replace_dialog(self, event=None):
+        FindReplaceDialog(self.root, self.input_text, app_instance=self)
+        return "break"
+    
+    def _show_goto_line_dialog(self, event=None):
+        GoToLineDialog(self.root, app_instance=self)
+        return "break"
 
     def _show_about_dialog(self):
         about_win = tk.Toplevel(self.root)
@@ -505,7 +1000,7 @@ class GPTDictConverter:
         main_frame.pack(expand=True, fill=tk.BOTH)
 
         ttk.Label(main_frame, text="GPT字典编辑转换器", font=("", 12, "bold")).pack(pady=(0, 10))
-        ttk.Label(main_frame, text=f"版本: {self.version}").pack(pady=2)
+        ttk.Label(main_frame, text=f"版本: {APP_VERSION}").pack(pady=2)
         
         link_font = tkFont.Font(family="Helvetica", size=10, underline=True)
         
@@ -537,68 +1032,102 @@ class GPTDictConverter:
         
         about_win.focus_set()
         about_win.grab_set()
-
+    
     def _show_help_dialog(self):
         help_win = tk.Toplevel(self.root)
         help_win.title("使用教程")
         help_win.transient(self.root)
-        help_win.geometry("600x450")
+        help_win.geometry("700x600")
         
-        help_text_content = """
-        欢迎使用 GPT字典编辑转换器！
+        # Markdown格式的帮助信息
+        help_text_md = """
+# GPT字典编辑转换器使用教程
 
-        基本流程:
-        1. 打开文件或粘贴内容:
-           - 点击“打开文件”按钮选择一个 .json, .toml, 或 .txt 文件。
-           - 或者直接将文本内容粘贴到“输入内容”框中。
-           - 直接将文件拖拽到“输入内容”框中来打开。
-        
-        2. 格式识别:
-           - 程序会自动尝试识别输入内容的格式，并在“输入格式”下拉框中显示。
-           - 如果识别错误或失败，你可以手动指定正确的输入格式。
+本工具旨在为不同格式的字典/词典文件提供一个统一的编辑和转换平台。
 
-        3. 选择输出格式:
-           - 在“输出格式”下拉框中选择你想要转换的目标格式。
+## 一、核心工作流程
 
-        4. 执行转换:
-           - 点击“转换”按钮，转换后的内容将显示在“输出内容”框中。
-           - 如果输入和输出格式相同（如 TSV->TSV），程序会格式化文件
-             并保留所有注释。
+### 1、 **加载数据** (三选一)
 
-        5. 保存结果:
-           - 点击“保存输出内容”按钮，将输出内容保存到新文件中。
-           - 点击“保存输入内容”按钮，可以直接覆盖保存已打开的文件，
-             或者将当前输入框的内容格式化后另存为新文件。
+- **打开文件**: 点击 `打开文件` 按钮，选择一个支持的 `.json`, `.toml`, 或 `.txt` 文件。
+- **粘贴文本**: 直接将文本内容粘贴到左侧的 **“输入内容”** 框中。
+- **拖放文件**: 将文件直接从您的文件管理器拖拽到 **“输入内容”** 框中。
 
-        -------------------------------------------------------------
+### 2、  **选择格式**
 
-        其他功能:
-        - 清空: 点击“清空”按钮以清除输入和输出框的所有内容。
-        - 复制: 点击输出框旁的“复制”按钮，快速复制输出结果。
-        - ← 按钮: 点击输入框和输出框之间的 ← 按钮，可以将当前输出内容
-          转移到输入框，方便进行二次编辑或格式转换。
-        
-        编辑功能 (在输入框中生效):
-        - 查找与替换 (快捷键 Ctrl+F):
-          - 打开查找与替换对话框。
-          - 支持区分大小写、正则表达式等高级功能。
+- **输入格式**: 程序会 **`自动检测`** 加载内容的格式。如果检测失败或不准确，  
+您必须从下拉菜单中 **手动指定** 正确的格式。
+- **输出格式**: 从右侧的下拉菜单中选择您想要转换的目标格式。
 
-        - 注释/取消注释 (快捷键 Ctrl+/):
-          - 快速为选中行或当前光标所在行添加或移除注释符号 (# 或 //)。
-          - 支持多行操作。
+### 3、  **执行转换**
 
-        - 语法高亮:
-          - 程序会自动为不同格式的文本（如JSON, TOML, TSV）进行语法高亮，
-            方便阅读。（TSV会将制表符\\t显示为浅蓝色，4个连续空格显示为黑色）
+- **自动转换** (默认开启): 每当输入内容或格式选择发生变化时，程序会自动进行转换。
+- **手动转换**: 取消勾选 `自动转换` 后，需点击 `转换` 按钮来触发。
 
-        - 选中词高亮:
-          - 当你选中一段文本时，输入框中所有相同的文本都会被高亮显示。
+### 4、  **保存结果**
+
+- 点击 `保存输出`，将右侧 **“输出内容”** 框中的结果保存为新文件。
+- 点击 `保存输入`，可将左侧 **“输入内容”** 框中的文本保存。若已打开文件，则可覆盖保存。
+
+## 二、界面与功能详解
+
+- **`清空`**: 一键清除输入和输出框的所有内容，并重置文件关联。
+- **`复制`**: 快速将对应文本框的全部内容复制到系统剪贴板。
+- **`传至输入栏`**: 将 **“输出内容”** 框中的结果发送到 **“输入内容”** 框，并自动同步格式。  
+此功能对于“链式转换”（如 A->B->C）或对转换结果进行二次编辑非常有用。
+
+## 三、高级编辑功能
+
+*这些功能主要在左侧的 **“输入内容”** 框中生效。*
+
+### **查找与替换 (`Ctrl+F`)**  
+
+- 在输入框内进行文本搜索和替换。
+- 支持 **“区分大小写”** 和强大的 **“正则表达式”** 模式。
+
+### **注释/取消注释 (`Ctrl+/`)**
+
+- 自动为当前行或选中的多行添加/移除对应格式的注释符。
+- TOML 使用 `#`，TSV 使用 `//`。(此功能对JSON格式无效)
+
+### **转到行 (`Ctrl+G`)**
+
+- 快速跳转到输入或输出框的指定行。
+
+### **语法高亮**
+
+- 程序会根据当前选择的格式自动对文本进行着色，提高可读性。
+- TSV 格式特殊高亮：**制表符(Tab)** 和作为分隔符的 **四个连续空格** 会显示背景色，以便明确区分。
+
+### **选中词高亮**
+
+- 在输入框中选中一段文本时，所有与之相同的内容都会被自动高亮。
+
+## 四、支持的格式说明
+
+- **`AiNiee/LinguaGacha JSON`**: JSON 数组格式，每个对象包含 `srt` (原文), `dst` (译文), `info` (备注) 键。
+- **`GalTranslPP GUI TOML`**: TOML 格式，包含一个名为 `gptDict` 的表数组，每个表包含 `org`, `rep`, `note` 键。
+- **`GalTranslPP CLI TOML`**: TOML 格式，每个条目由独立的 `[[gptDict]]` 表定义，包含 `searchStr`, `replaceStr`, `note` 键。
+- **`GalTransl TSV`**: 纯文本格式，使用制表符 (Tab) 或四个空格分隔。以 `//` 开头的行为注释。
+
         """
 
-        text_area = scrolledtext.ScrolledText(help_win, wrap=tk.WORD, font=("", 10), padx=5, pady=5)
-        text_area.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
-        text_area.insert(tk.END, help_text_content)
-        text_area.config(state=tk.DISABLED)
+        main_frame = ttk.Frame(help_win, padding=10)
+        main_frame.pack(expand=True, fill=tk.BOTH)
+
+        # Markdown to HTML
+        html_content = markdown.markdown(help_text_md, extensions=['fenced_code', 'tables'])
+
+        # Use HTMLScrolledText from tkhtmlview to display the rendered HTML
+        html_text = HTMLScrolledText(main_frame, background="white")
+        html_text.pack(expand=True, fill=tk.BOTH)
+        html_text.set_html(html_content)
+
+        # Bottom button
+        button_frame = ttk.Frame(help_win, padding=(0, 0, 0, 10))
+        button_frame.pack(fill=tk.X)
+        ok_button = ttk.Button(button_frame, text="关闭", command=help_win.destroy)
+        ok_button.pack()
 
         help_win.update_idletasks()
         x = self.root.winfo_x() + (self.root.winfo_width() - help_win.winfo_width()) // 2
@@ -608,563 +1137,11 @@ class GPTDictConverter:
         help_win.focus_set()
         help_win.grab_set()
 
-    def _setup_editor_features(self):
-        widgets = [self.input_text, self.output_text]
-        for widget in widgets: # 'widget' is an EditorWithLineNumbers instance
-            widget.config(
-                font=("Consolas", 10),
-                background="#FFFFFF",
-                foreground="#000000",
-                insertbackground="#000000",
-                selectbackground="#ADD6FF",
-                selectforeground="#000000",
-                inactiveselectbackground="#E5E5E5",
-                insertwidth=2,
-                padx=5,
-                pady=5,
-            )
-            
-            # tag_configure can be called on the wrapper thanks to __getattr__
-            widget.tag_configure("key", foreground="#0000FF")
-            widget.tag_configure("string", foreground="#A31515")
-            widget.tag_configure("punc", foreground="#000000")
-            widget.tag_configure("number", foreground="#098658")
-            widget.tag_configure("comment", foreground="#008000")
-            widget.tag_configure("tsv_tab", background="#E5E5E5")
-            widget.tag_configure("tsv_space_delimiter", background="#E5E5E5", foreground="black")
-            widget.tag_configure("highlight_duplicate", background="#7FB4FF")
-            widget.tag_configure('found', background='#ADD6FF')
-            widget.tag_configure('goto_line', background='#fffacd')
-            
-            # ### 修正: 必须将事件绑定到拥有焦点的内部 Text 组件上 ###
-            internal_text_widget = widget.text
-            
-            # 这些事件由内部 Text 组件触发
-            internal_text_widget.bind("<KeyRelease>", self._on_text_change)
-            internal_text_widget.bind("<ButtonRelease-1>", self._on_text_change)
-            
-            # 快捷键事件也必须绑定在内部 Text 组件上
-            internal_text_widget.bind("<Control-slash>", self._toggle_comment)
-            internal_text_widget.bind("<Control-f>", self._show_find_replace_dialog)
-            internal_text_widget.bind("<Control-g>", self._show_goto_line_dialog)
-            
-        self.highlight_job = None
-        
-    def _on_text_change(self, event=None):
-        if hasattr(self, 'highlight_job') and self.highlight_job:
-            self.root.after_cancel(self.highlight_job)
-        
-        widget = event.widget if event else self.root.focus_get()
 
-        if isinstance(widget, tk.Text):
-            widget.tag_remove("goto_line", "1.0", tk.END)
-
-            parent_editor = widget
-            while not isinstance(parent_editor, EditorWithLineNumbers) and parent_editor is not None:
-                parent_editor = parent_editor.master
-            
-            if parent_editor:
-                self.highlight_job = self.root.after(200, lambda: self._update_all_highlights(parent_editor))
-            
-    def _update_all_highlights(self, widget):
-        self._apply_syntax_highlighting(widget)
-        self._highlight_duplicates_on_selection(widget)
-        
-    def _show_find_replace_dialog(self, event=None):
-        target = self.input_text
-        FindReplaceDialog(self.root, target, app_instance=self)
-        return "break"
-    
-    def _show_goto_line_dialog(self, event=None):
-        GoToLineDialog(self.root, app_instance=self)
-        return "break"
-
-    def replace_all(self, target_widget, find_text, replace_text, use_regex, case_sensitive):
-        content = target_widget.get("1.0", "end-1c")
-        lines = content.split('\n')
-        new_lines = []
-        total_count = 0
-        flags = re.IGNORECASE if not case_sensitive else 0
-        
-        try:
-            if use_regex:
-                pattern = re.compile(find_text, flags)
-                for line in lines:
-                    new_line, count = pattern.subn(replace_text, line)
-                    new_lines.append(new_line)
-                    total_count += count
-            else:
-                if case_sensitive:
-                    for line in lines:
-                        count = line.count(find_text)
-                        if count > 0:
-                            new_lines.append(line.replace(find_text, replace_text))
-                            total_count += count
-                        else:
-                            new_lines.append(line)
-                else:
-                    pattern = re.compile(re.escape(find_text), flags)
-                    for line in lines:
-                        new_line, count = pattern.subn(replace_text, line)
-                        new_lines.append(new_line)
-                        total_count += count
-        except re.error as e:
-            messagebox.showerror("正则表达式错误", str(e))
-            return
-
-        if total_count > 0:
-            new_content = "\n".join(new_lines)
-            target_widget.edit_separator()
-            target_widget.delete("1.0", tk.END)
-            target_widget.insert("1.0", new_content)
-            target_widget.edit_separator()
-            self._update_all_highlights(target_widget)
-            messagebox.showinfo("成功", f"已完成 {total_count} 处替换。")
-        else:
-            messagebox.showinfo("提示", "未找到可替换的内容。")
-
-    def _toggle_comment(self, event):
-        widget = event.widget
-        format_name = self.input_format.get()
-        if format_name == "自动检测":
-            content = widget.get("1.0", tk.END)
-            detected = self.detect_format(content)
-            format_key = self.get_format_key(detected, display_name=True) if detected else None
-        else:
-            format_key = self.get_format_key(format_name, display_name=True)
-        comment_char = {"GPPGUI_TOML": "#", "GPPCLI_TOML": "#", "GalTransl_TSV": "//"}.get(format_key)
-        if not comment_char: return "break"
-        
-        try:
-            sel_start, sel_end = widget.index(tk.SEL_FIRST), widget.index(tk.SEL_LAST)
-            start_line, end_line = int(sel_start.split('.')[0]), int(sel_end.split('.')[0])
-        except tk.TclError:
-            line_num_str = widget.index(tk.INSERT).split('.')[0]
-            start_line = end_line = int(line_num_str)
-        
-        widget.edit_separator()
-        lines = [widget.get(f"{i}.0", f"{i}.end") for i in range(start_line, end_line + 1)]
-        non_empty_lines = [line for line in lines if line.strip()]
-        if not non_empty_lines:
-            widget.edit_separator()
-            return "break"
-        all_commented = all(line.strip().startswith(comment_char) for line in non_empty_lines)
-
-        for i in range(start_line, end_line + 1):
-            line_content = widget.get(f"{i}.0", f"{i}.end")
-            if all_commented:
-                if line_content.strip():
-                    if f"{comment_char} " in line_content:
-                        idx = line_content.find(f"{comment_char} ")
-                        widget.delete(f"{i}.{idx}", f"{i}.{idx + len(comment_char) + 1}")
-                    elif comment_char in line_content:
-                        idx = line_content.find(comment_char)
-                        widget.delete(f"{i}.{idx}", f"{i}.{idx + len(comment_char)}")
-            elif line_content.strip():
-                widget.insert(f"{i}.0", f"{comment_char} ")
-        widget.edit_separator()
-        
-        parent_editor = widget
-        while not isinstance(parent_editor, EditorWithLineNumbers):
-            parent_editor = parent_editor.master
-        self._update_all_highlights(parent_editor)
-        return "break"
-        
-    def _apply_syntax_highlighting(self, widget):
-        tags = ["key", "string", "punc", "number", "comment", "tsv_tab", "tsv_space_delimiter"]
-        for tag in tags:
-            widget.tag_remove(tag, "1.0", tk.END)
-            
-        format_key = None
-        content = widget.get("1.0", tk.END)
-        
-        if widget == self.input_text:
-            format_name = self.input_format.get()
-            if format_name == "自动检测":
-                detected = self.detect_format(content)
-                format_key = self.get_format_key(detected, display_name=True) if detected else None
-            else:
-                format_key = self.get_format_key(format_name, display_name=True)
-        else:
-            format_name = self.output_format.get()
-            format_key = self.get_format_key(format_name, display_name=True)
-            
-        if format_key == "GalTransl_TSV":
-            for match in re.finditer(r"\t", content):
-                start, end = f"1.0 + {match.start()} chars", f"1.0 + {match.end()} chars"
-                widget.tag_add("tsv_tab", start, end)
-            for match in re.finditer(r'(?<=\S) {4}(?=\S)', content):
-                start, end = f"1.0 + {match.start()} chars", f"1.0 + {match.end()} chars"
-                widget.tag_add("tsv_space_delimiter", start, end)
-            for match in re.finditer(r"//.*$", content, re.MULTILINE):
-                widget.tag_add("comment", f"1.0 + {match.start()} chars", f"1.0 + {match.end()} chars")
-        else:
-            for match in re.finditer(r"#.*$", content, re.MULTILINE):
-                widget.tag_add("comment", f"1.0 + {match.start()} chars", f"1.0 + {match.end()} chars")
-            for match in re.finditer(r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*:', content):
-                widget.tag_add("key", f"1.0 + {match.start(1)} chars", f"1.0 + {match.end(1)} chars")
-            for match in re.finditer(r"^\s*(\w+)\s*=", content, re.MULTILINE):
-                widget.tag_add("key", f"1.0 + {match.start(1)} chars", f"1.0 + {match.end(1)} chars")
-            for match in re.finditer(r"('[^']*'|\"[^\"\\]*(?:\\.[^\"\\]*)*\")", content):
-                if "key" not in widget.tag_names(f"1.0 + {match.start()} chars"):
-                    widget.tag_add("string", f"1.0 + {match.start()} chars", f"1.0 + {match.end()} chars")
-            for match in re.finditer(r"[\[\]{},=:]", content):
-                if not "comment" in widget.tag_names(f"1.0 + {match.start()} chars"):
-                    widget.tag_add("punc", f"1.0 + {match.start()} chars", f"1.0 + {match.end()} chars")
-                    
-    def _highlight_duplicates_on_selection(self, widget):
-        widget.tag_remove("highlight_duplicate", "1.0", tk.END)
-        try:
-            selected_text = widget.get(tk.SEL_FIRST, tk.SEL_LAST)
-            if selected_text:
-                start_pos = "1.0"
-                while True:
-                    start_pos = widget.search(selected_text, start_pos, stopindex=tk.END, exact=True)
-                    if not start_pos: break
-                    end_pos = f"{start_pos} + {len(selected_text)}c"
-                    widget.tag_add("highlight_duplicate", start_pos, end_pos)
-                    start_pos = end_pos
-        except tk.TclError:
-            pass 
-            
-    def get_format_key(self, name, display_name=False):
-        if display_name:
-            for key, value in self.format_names.items():
-                if value == name: return key
-        else:
-            return name
-        return None
-        
-    def detect_format(self, content):
-        content = content.strip()
-        if not content: return None
-        if any(line.strip().startswith('//') or '\t' in line or re.search(r'\S {4}\S', line) for line in content.split('\n') if not line.strip().startswith("#")):
-            return self.format_names["GalTransl_TSV"]
-        if 'gptDict' in content or '[[gptDict]]' in content:
-            try:
-                toml.loads(content)
-                if '[[gptDict]]' in content: return self.format_names["GPPCLI_TOML"]
-                return self.format_names["GPPGUI_TOML"]
-            except: pass
-        if content.startswith('[') and content.endswith(']'):
-            try:
-                data = json.loads(content)
-                if isinstance(data, list) and data and all(k in data[0] for k in ['srt', 'dst', 'info']):
-                    return self.format_names["AiNiee_JSON"]
-            except: pass
-        return None
-        
-    def parse_tsv_line(self, line):
-        line = line.strip()
-        if not line or line.startswith(('//', '#')): return None
-        parts = re.split(r'\t|(?<=\S) {4}(?=\S)', line)
-        parts = [p.strip() for p in parts]
-        if len(parts) >= 2:
-            return {'org': parts[0], 'rep': parts[1], 'note': parts[2] if len(parts) > 2 else ''}
-        return None
-        
-    def parse_input(self, content, format_display_name):
-        format_key = self.get_format_key(format_display_name, display_name=True)
-        data = []
-        if content.startswith('\ufeff'):
-            content = content[1:]
-        if not content.strip(): return []
-
-        if format_key == "AiNiee_JSON":
-            json_data = json.loads(content)
-            for item in json_data: data.append({'org': item.get('srt', ''), 'rep': item.get('dst', ''), 'note': item.get('info', '')})
-        elif format_key == "GPPGUI_TOML":
-            toml_data = toml.loads(content)
-            for item in toml_data.get('gptDict', []): data.append({'org': item.get('org', ''), 'rep': item.get('rep', ''), 'note': item.get('note', '')})
-        elif format_key == "GPPCLI_TOML":
-            toml_data = toml.loads(content)
-            for item in toml_data.get('gptDict', []): data.append({'org': item.get('searchStr', ''), 'rep': item.get('replaceStr', ''), 'note': item.get('note', '')})
-        elif format_key == "GalTransl_TSV":
-            for line in content.split('\n'):
-                parsed = self.parse_tsv_line(line)
-                if parsed: data.append(parsed)
-        return data
-        
-    def format_output(self, data, format_key):
-        if format_key == "AiNiee_JSON":
-            json_data = [{'srt': item['org'], 'dst': item['rep'], 'info': item['note']} for item in data]
-            return json.dumps(json_data, ensure_ascii=False, indent=2)
-        elif format_key == "GPPGUI_TOML":
-            lines = ["gptDict = ["]
-            for item in data:
-                org = self.escape_toml_string_single(item.get('org',''))
-                rep = self.escape_toml_string_single(item.get('rep',''))
-                note = self.escape_toml_string_single(item.get('note',''))
-                lines.append(f"\t{{ org = '{org}', rep = '{rep}', note = '{note}' }},")
-            lines.append("]")
-            return "\n".join(lines)
-        elif format_key == "GPPCLI_TOML":
-            parts = []
-            for item in data:
-                org = self.escape_toml_string_single(item.get('org',''))
-                rep = self.escape_toml_string_single(item.get('rep',''))
-                note = self.escape_toml_string_single(item.get('note',''))
-                parts.append(f"[[gptDict]]\nnote = '{note}'\nreplaceStr = '{rep}'\nsearchStr = '{org}'")
-            return "\n\n".join(parts)
-        elif format_key == "GalTransl_TSV":
-            return "\n".join([f"{item['org']}\t{item['rep']}" + (f"\t{item['note']}" if item['note'] else "") for item in data])
-        return ""
-        
-    def escape_toml_string_single(self, text):
-        return text.replace("'", "''")
-        
-    def convert(self):
-        try:
-            input_content = self.input_text.get("1.0", tk.END)
-            if not input_content.strip():
-                messagebox.showwarning("警告", "请输入要转换的内容")
-                return
-
-            input_format, output_format = self.input_format.get(), self.output_format.get()
-            
-            if input_format == "自动检测":
-                detected_format_display = self.detect_format(input_content)
-                if not detected_format_display:
-                    raise ValueError("无法自动检测输入内容的格式。")
-                self.input_format.set(detected_format_display)
-                input_format = detected_format_display
-
-            format_key = self.get_format_key(input_format, display_name=True)
-            if input_format == output_format and format_key in ["GalTransl_TSV", "GPPGUI_TOML", "GPPCLI_TOML"]:
-                output_content = self._reformat_current_format(input_content, input_format)
-                status_msg = f"格式化完成: {input_format}"
-            else:
-                data = self.parse_input(input_content, input_format)
-                output_key = self.get_format_key(output_format, display_name=True)
-                output_content = self.format_output(data, output_key)
-                status_msg = f"转换完成: {input_format} → {output_format}"
-
-            self.output_text.config(state=tk.NORMAL)
-            self.output_text.delete("1.0", tk.END)
-            self.output_text.insert("1.0", output_content)
-            self._update_all_highlights(self.output_text)
-            self.output_text.config(state=tk.DISABLED)
-            self.status_var.set(status_msg)
-
-        except Exception as e:
-            messagebox.showerror("错误", f"处理失败: {str(e)}")
-            self.status_var.set("处理失败")
-
-    def _reformat_current_format(self, content, format_display_name):
-        format_key = self.get_format_key(format_display_name, display_name=True)
-        if format_key == "GalTransl_TSV":
-            return self._reformat_tsv(content)
-        if format_key == "GPPGUI_TOML":
-            return self._reformat_gppgui_toml(content)
-        if format_key == "GPPCLI_TOML":
-            return self._reformat_gppcli_toml(content)
-        return content
-
-    def _reformat_tsv(self, content):
-        new_lines = []
-        for line in content.splitlines():
-            parsed = self.parse_tsv_line(line)
-            if parsed:
-                new_line = f"{parsed['org']}\t{parsed['rep']}"
-                if parsed['note']:
-                    new_line += f"\t{parsed['note']}"
-                new_lines.append(new_line)
-            else:
-                new_lines.append(line)
-        return "\n".join(new_lines)
-
-    def _extract_toml_val(self, text, key):
-        pattern = rf"{key}\s*=\s*'((?:[^']|'')*)'"
-        match = re.search(pattern, text)
-        if match:
-            return match.group(1).replace("''", "'")
-        return None
-
-    def _reformat_gppgui_toml(self, content):
-        new_lines = []
-        for line in content.splitlines():
-            match = re.match(r'^(\s*)(\{.*?\})(\s*,?\s*)(#.*)?$', line)
-            if not match:
-                new_lines.append(line)
-                continue
-
-            leading_ws, entry_text, trailing_part, comment = match.groups()
-            comment = comment or ""
-
-            org = self._extract_toml_val(entry_text, 'org')
-            rep = self._extract_toml_val(entry_text, 'rep')
-            note = self._extract_toml_val(entry_text, 'note')
-
-            if org is not None and rep is not None and note is not None:
-                reformatted_entry = "{{ org = '{}', rep = '{}', note = '{}' }}".format(
-                    self.escape_toml_string_single(org),
-                    self.escape_toml_string_single(rep),
-                    self.escape_toml_string_single(note)
-                )
-                new_lines.append(f"{leading_ws}{reformatted_entry}{trailing_part}{comment}")
-            else:
-                new_lines.append(line)
-        return "\n".join(new_lines)
-
-    def _extract_toml_val_with_comment(self, line, key):
-        if line is None: return ('', '')
-        pattern = rf"^\s*{key}\s*=\s*'((?:[^']|'')*)'(\s*#.*)?\s*$"
-        match = re.match(pattern, line)
-        if match:
-            val_escaped, comment = match.groups()
-            val = val_escaped.replace("''", "'")
-            return val, (comment or "")
-        return ('', '')
-
-    def _reformat_gppcli_toml(self, content):
-        blocks = re.split(r'(\n*\[\[gptDict\]\]\n)', content)
-        new_content = [blocks[0]]
-
-        for i in range(1, len(blocks), 2):
-            marker = blocks[i]
-            block_content = blocks[i+1]
-            
-            note_line, rep_line, org_line = None, None, None
-            other_lines = []
-
-            for line in block_content.splitlines():
-                stripped = line.strip()
-                if stripped.startswith('note ='): note_line = line
-                elif stripped.startswith('replaceStr ='): rep_line = line
-                elif stripped.startswith('searchStr ='): org_line = line
-                else: other_lines.append(line)
-
-            note_val, note_comment = self._extract_toml_val_with_comment(note_line, 'note')
-            rep_val, rep_comment = self._extract_toml_val_with_comment(rep_line, 'replaceStr')
-            org_val, org_comment = self._extract_toml_val_with_comment(org_line, 'searchStr')
-
-            new_content.append(marker.strip())
-
-            new_content.append(f"note = '{self.escape_toml_string_single(note_val)}'{note_comment}")
-            new_content.append(f"replaceStr = '{self.escape_toml_string_single(rep_val)}'{rep_comment}")
-            new_content.append(f"searchStr = '{self.escape_toml_string_single(org_val)}'{org_comment}")
-            
-            if other_lines:
-                new_content.extend(other_lines)
-
-        return "\n".join(new_content)
-            
-    def open_file(self):
-        file_path = filedialog.askopenfilename(
-            title="选择文件",
-            filetypes=[("所有支持格式", "*.json;*.toml;*.txt"), ("所有文件", "*.*")]
-        )
-        if file_path:
-            self._open_file_path(file_path)
-            
-    def on_drop(self, event):
-        # The event.data might be a string with spaces enclosed in curly braces
-        file_path = event.data.strip('{}')
-        self._open_file_path(file_path)
-
-    def _open_file_path(self, file_path):
-        if not file_path: return
-        try:
-            with open(file_path, 'r', encoding='utf-8-sig') as f:
-                content = f.read()
-            self.input_text.delete("1.0", tk.END)
-            self.input_text.insert("1.0", content)
-            self.input_text.edit_reset()
-            self.current_file_path = file_path
-            detected_format = self.detect_format(content)
-            if detected_format:
-                self.input_format.set(detected_format)
-            else:
-                self.input_format.set("自动检测")
-            self.status_var.set(f"已打开文件: {os.path.basename(file_path)}")
-            self._update_all_highlights(self.input_text)
-        except Exception as e:
-            messagebox.showerror("错误", f"打开文件失败: {str(e)}")
-
-    def save_input_file(self):
-        input_content = self.input_text.get("1.0", tk.END).strip()
-        if not input_content:
-            messagebox.showwarning("警告", "输入内容为空，无法保存")
-            return
-
-        if self.current_file_path:
-            if messagebox.askyesno(
-                "确认保存",
-                f"是否要覆盖现有文件？\n\n{self.current_file_path}",
-                parent=self.root
-            ):
-                try:
-                    with open(self.current_file_path, 'w', encoding='utf-8') as f:
-                        f.write(self.input_text.get("1.0", "end-1c"))
-                    self.status_var.set(f"文件已覆盖保存: {os.path.basename(self.current_file_path)}")
-                except Exception as e:
-                    messagebox.showerror("错误", f"保存文件失败: {str(e)}")
-                    self.status_var.set("保存失败")
-        else:
-            original_input_format = self.input_format.get()
-            target_format = ""
-
-            if original_input_format == "自动检测":
-                detected_format = self.detect_format(input_content)
-                if not detected_format:
-                    messagebox.showerror("错误", "无法自动检测输入内容的格式，无法保存。请手动指定输入格式。", parent=self.root)
-                    return
-                target_format = detected_format
-                self.input_format.set(detected_format)
-            else:
-                target_format = original_input_format
-            
-            self.output_format.set(target_format)
-            self.convert()
-
-            if original_input_format == "自动检测":
-                self.input_format.set("自动检测")
-
-            self.output_text.config(state=tk.NORMAL)
-            output_for_saving = self.output_text.get("1.0", tk.END).strip()
-            self.output_text.config(state=tk.DISABLED)
-
-            if output_for_saving:
-                self.save_file()
-            else:
-                self.status_var.set("转换后无内容可保存。")
-
-    def save_file(self):
-        self.output_text.config(state=tk.NORMAL)
-        output_content = self.output_text.get("1.0", tk.END).strip()
-        self.output_text.config(state=tk.DISABLED)
-        if not output_content:
-            messagebox.showwarning("警告", "没有内容可保存")
-            return
-            
-        output_format_display = self.output_format.get()
-        format_key = self.get_format_key(output_format_display, display_name=True)
-        default_ext = {
-            "AiNiee_JSON": ".json", "GPPGUI_TOML": ".toml", 
-            "GPPCLI_TOML": ".toml", "GalTransl_TSV": ".txt"
-        }.get(format_key, ".txt")
-        
-        file_path = filedialog.asksaveasfilename(
-            title="保存输出内容", defaultextension=default_ext,
-            filetypes=[(f"{output_format_display}", f"*{default_ext}"), ("所有文件", "*.*")]
-        )
-        if not file_path: return
-        try:
-            with open(file_path, 'w', encoding='utf-8') as f: f.write(output_content)
-            self.status_var.set(f"已保存输出内容: {os.path.basename(file_path)}")
-        except Exception as e:
-            messagebox.showerror("错误", f"保存输出内容失败: {str(e)}")
-            
-    def clear(self):
-        self.input_text.delete("1.0", tk.END)
-        self.output_text.config(state=tk.NORMAL)
-        self.output_text.delete("1.0", tk.END)
-        self.output_text.config(state=tk.DISABLED)
-        self.current_file_path = None
-        self.status_var.set("已清空")
-
+# #####################################################################
+# 7. 主函数
+# #####################################################################
 def main():
-    # ### 修改: 使用 TkinterDnD.Tk() 代替 tk.Tk() ###
     root = TkinterDnD.Tk()
     app = GPTDictConverter(root)
     root.mainloop()
