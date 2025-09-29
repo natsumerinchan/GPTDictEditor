@@ -50,7 +50,7 @@ from typing import Optional, List, Dict, Any, Tuple
 # #####################################################################
 # 3. 全局常量定义
 # #####################################################################
-APP_VERSION = "v1.2.0"
+APP_VERSION = "v1.2.1"
 HIGHLIGHT_DELAY_MS = 250  # 语法高亮延迟时间
 
 # 统一管理格式定义，方便扩展
@@ -354,33 +354,33 @@ class FindReplaceDialog(tk.Toplevel):
         find_str = self.find_entry.get()
         if not find_str:
             return
-        content = self.target.get('1.0', tk.END)
         case = self.case_var.get()
         regex = self.regex_var.get()
         matches = []
+        lines = self.target.get('1.0', tk.END).splitlines(keepends=True)
         try:
-            if regex:
-                flags = 0 if case else re.IGNORECASE
-                for m in re.finditer(find_str, content, flags):
-                    start = m.start()
-                    end = m.end()
-                    start_idx = self.target.index(f"1.0+{start}c")
-                    end_idx = self.target.index(f"1.0+{end}c")
-                    matches.append((start_idx, end_idx))
-            else:
-                search_str = find_str if case else find_str.lower()
-                idx = 0
-                while True:
-                    if case:
-                        idx = content.find(search_str, idx)
-                    else:
-                        idx = content.lower().find(search_str, idx)
-                    if idx == -1:
-                        break
-                    start_idx = self.target.index(f"1.0+{idx}c")
-                    end_idx = self.target.index(f"1.0+{idx+len(find_str)}c")
-                    matches.append((start_idx, end_idx))
-                    idx += len(find_str) if len(find_str) > 0 else 1
+            for line_num, line in enumerate(lines):
+                line_start_idx = f"{line_num+1}.0"
+                if regex:
+                    flags = 0 if case else re.IGNORECASE
+                    for m in re.finditer(find_str, line, flags):
+                        start = m.start()
+                        end = m.end()
+                        start_idx = self.target.index(f"{line_num+1}.{start}")
+                        end_idx = self.target.index(f"{line_num+1}.{end}")
+                        matches.append((start_idx, end_idx, m, line_num, start, end))
+                else:
+                    search_line = line if case else line.lower()
+                    search_str = find_str if case else find_str.lower()
+                    idx = 0
+                    while True:
+                        idx = search_line.find(search_str, idx)
+                        if idx == -1:
+                            break
+                        start_idx = self.target.index(f"{line_num+1}.{idx}")
+                        end_idx = self.target.index(f"{line_num+1}.{idx+len(find_str)}")
+                        matches.append((start_idx, end_idx, None, line_num, idx, idx+len(find_str)))
+                        idx += len(find_str) if len(find_str) > 0 else 1
         except re.error:
             self.status_label.config(text="正则表达式错误")
             return
@@ -390,14 +390,25 @@ class FindReplaceDialog(tk.Toplevel):
         # 找到当前高亮项
         cursor = self.target.index(tk.INSERT)
         cur = 0
-        for i, (start, end) in enumerate(matches):
-            if self.target.compare(cursor, '>=', start) and self.target.compare(cursor, '<=', end):
+        for i, (start_idx, end_idx, m, line_num, s, e) in enumerate(matches):
+            if self.target.compare(cursor, '>=', start_idx) and self.target.compare(cursor, '<', end_idx):
                 cur = i
                 break
-        sel_start, sel_end = matches[cur]
+        sel_start, sel_end, match_obj, line_num, s, e = matches[cur]
         self.target.edit_separator()
-        self.target.delete(sel_start, sel_end)
-        self.target.insert(sel_start, self.replace_entry.get())
+        if regex and match_obj is not None:
+            # 只替换当前高亮项
+            line_content = lines[line_num]
+            repl_func = self._vscode_style_repl(self.replace_entry.get())
+            # 只替换该行的第s到e部分
+            new_line = line_content[:s] + re.sub(find_str, repl_func, line_content[s:e], count=1, flags=(0 if case else re.IGNORECASE)) + line_content[e:]
+            # 替换该行
+            self.target.delete(f"{line_num+1}.0", f"{line_num+1}.end")
+            self.target.insert(f"{line_num+1}.0", new_line.rstrip('\n').rstrip('\r'))
+        else:
+            # 普通模式直接替换
+            self.target.delete(sel_start, sel_end)
+            self.target.insert(sel_start, self.replace_entry.get())
         self.target.edit_separator()
         # 替换后匹配项可能减少，需防止cur越界
         new_content = self.target.get('1.0', tk.END)
