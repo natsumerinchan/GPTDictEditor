@@ -47,7 +47,7 @@
 - 自动为当前行或选中的多行添加/移除对应格式的注释符。
 - TOML 使用 `#`，TSV 使用 `//`。(此功能对JSON格式无效)
 
-### **转到行 (`Ctrl+G`)**
+### **跳转到行 (`Ctrl+G`)**
 
 - 快速跳转到输入或输出框的指定行。
 
@@ -62,7 +62,7 @@
 
 ## 四、支持的格式说明
 
-- **`AiNiee/LinguaGacha JSON`**: JSON 数组格式，每个对象包含 `srt` (原文), `dst` (译文), `info` (备注) 键。
+- **`AiNiee/LinguaGacha JSON`**: JSON 数组格式，每个对象包含 `src` (原文), `dst` (译文), `info` (备注) 键。
 - **`GalTranslPP GUI TOML`**: TOML 格式，包含一个名为 `gptDict` 的表数组，每个表包含 `org`, `rep`, `note` 键。
 - **`GalTranslPP CLI TOML`**: TOML 格式，每个条目由独立的 `[[gptDict]]` 表定义，包含 `searchStr`, `replaceStr`, `note` 键。
 - **`GalTransl TSV`**: 纯文本格式，使用制表符 (Tab) 或四个空格分隔。以 `//` 开头的行为注释。

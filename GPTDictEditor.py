@@ -50,7 +50,7 @@ from typing import Optional, List, Dict, Any, Tuple
 # #####################################################################
 # 3. 全局常量定义
 # #####################################################################
-APP_VERSION = "v1.1.0"
+APP_VERSION = "v1.1.1"
 HIGHLIGHT_DELAY_MS = 250  # 语法高亮延迟时间
 
 # 统一管理格式定义，方便扩展
@@ -274,7 +274,7 @@ class GoToLineDialog(tk.Toplevel):
         super().__init__(master)
         self.app = app_instance
         self.transient(master)
-        self.title("转到行")
+        self.title("跳转到行")
         self.geometry("280x150")
         self.resizable(False, False)
         
@@ -484,7 +484,7 @@ class GPTDictConverter:
         edit_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="编辑", menu=edit_menu)
         edit_menu.add_command(label="查找与替换 (Ctrl+F)", command=self._show_find_replace_dialog)
-        edit_menu.add_command(label="转到行... (Ctrl+G)", command=self._show_goto_line_dialog)
+        edit_menu.add_command(label="跳转到行... (Ctrl+G)", command=self._show_goto_line_dialog)
         help_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="帮助", menu=help_menu)
         help_menu.add_command(label="使用教程", command=self._show_help_dialog)
@@ -575,7 +575,7 @@ class GPTDictConverter:
             'GPPGUI_TOML': [('KEY', r'\b(org|rep|note)\b(?=\s*=)')],
             'GPPCLI_TOML': [('KEY', r'\b(note|replaceStr|searchStr)\b(?=\s*=)')],
             # 专用于 JSON 的关键字规则
-            'AiNiee_JSON': [('KEY', r'"(srt|dst|info)"(?=\s*:)')],
+            'AiNiee_JSON': [('KEY', r'"(src|dst|info)"(?=\s*:)')],
             # TSV 格式的完整独立规则
             'GalTransl_TSV': [
                 ('COMMENT', r'//.*$'),
@@ -614,7 +614,7 @@ class GPTDictConverter:
             if kind in tag_map:
                 # JSON的key包含引号，特殊处理以仅高亮引号内的文本
                 if format_key == "AiNiee_JSON" and kind == 'KEY':
-                    # mo.group(1) 对应 r'"(srt|dst|info)"' 中的第一个括号
+                    # mo.group(1) 对应 r'"(src|dst|info)"' 中的第一个括号
                     key_start_offset = mo.start(1)
                     key_end_offset = mo.end(1)
                     if key_start_offset != -1: # 确保捕获组匹配成功
@@ -922,7 +922,7 @@ class GPTDictConverter:
         if content.startswith('[') and content.endswith(']'):
             try:
                 data = json.loads(content)
-                if isinstance(data, list) and data and all(k in data[0] for k in ['srt', 'dst', 'info']):
+                if isinstance(data, list) and data and all(k in data[0] for k in ['src', 'dst', 'info']):
                     return self.format_names["AiNiee_JSON"]
             except json.JSONDecodeError: pass
         return None
@@ -943,7 +943,7 @@ class GPTDictConverter:
 
         if format_key == "AiNiee_JSON":
             json_data = json.loads(content)
-            for item in json_data: data.append({'org': item.get('srt', ''), 'rep': item.get('dst', ''), 'note': item.get('info', '')})
+            for item in json_data: data.append({'org': item.get('src', ''), 'rep': item.get('dst', ''), 'note': item.get('info', '')})
         elif format_key == "GPPGUI_TOML":
             toml_data = toml.loads(content)
             for item in toml_data.get('gptDict', []): data.append({'org': item.get('org', ''), 'rep': item.get('rep', ''), 'note': item.get('note', '')})
@@ -958,7 +958,7 @@ class GPTDictConverter:
     def format_output(self, data: List[Dict[str, str]], format_key: str) -> str:
         escape = lambda text: text.replace("'", "''")
         if format_key == "AiNiee_JSON":
-            json_data = [{'srt': item['org'], 'dst': item['rep'], 'info': item['note']} for item in data]
+            json_data = [{'src': item['org'], 'dst': item['rep'], 'info': item['note']} for item in data]
             return json.dumps(json_data, ensure_ascii=False, indent=2)
         elif format_key == "GPPGUI_TOML":
             lines = ["gptDict = ["]
@@ -1090,7 +1090,7 @@ class GPTDictConverter:
 - 自动为当前行或选中的多行添加/移除对应格式的注释符。
 - TOML 使用 `#`，TSV 使用 `//`。(此功能对JSON格式无效)
 
-### **转到行 (`Ctrl+G`)**
+### **跳转到行 (`Ctrl+G`)**
 
 - 快速跳转到输入或输出框的指定行。
 
@@ -1105,7 +1105,7 @@ class GPTDictConverter:
 
 ## 四、支持的格式说明
 
-- **`AiNiee/LinguaGacha JSON`**: JSON 数组格式，每个对象包含 `srt` (原文), `dst` (译文), `info` (备注) 键。
+- **`AiNiee/LinguaGacha JSON`**: JSON 数组格式，每个对象包含 `src` (原文), `dst` (译文), `info` (备注) 键。
 - **`GalTranslPP GUI TOML`**: TOML 格式，包含一个名为 `gptDict` 的表数组，每个表包含 `org`, `rep`, `note` 键。
 - **`GalTranslPP CLI TOML`**: TOML 格式，每个条目由独立的 `[[gptDict]]` 表定义，包含 `searchStr`, `replaceStr`, `note` 键。
 - **`GalTransl TSV`**: 纯文本格式，使用制表符 (Tab) 或四个空格分隔。以 `//` 开头的行为注释。
