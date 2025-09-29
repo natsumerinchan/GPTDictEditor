@@ -1184,21 +1184,36 @@ class GPTDictConverter:
         
     def detect_format(self, content: str) -> Optional[str]:
         content = content.strip()
-        if not content: return None
-        if any(line.strip().startswith('//') or '\t' in line or re.search(r'\S {4}\S', line) for line in content.split('\n') if not line.strip().startswith("#")):
-            return self.format_names["GalTransl_TSV"]
-        if 'gptDict' in content or '[[gptDict]]' in content:
+        if not content:
+            return None
+        # 优先判断 TOML
+        if 'gptDict' in content or '[[gptDict]]' in content or content.startswith('gptDict'):
             try:
                 toml.loads(content)
-                if '[[gptDict]]' in content: return self.format_names["GPPCLI_TOML"]
+                if '[[gptDict]]' in content:
+                    return self.format_names["GPPCLI_TOML"]
                 return self.format_names["GPPGUI_TOML"]
-            except toml.TomlDecodeError: pass
+            except toml.TomlDecodeError:
+                pass
+        # TSV 判定需排除 TOML 结构
+        tsv_like = False
+        for line in content.split('\n'):
+            l = line.strip()
+            if l.startswith('#') or l.startswith('gptDict') or l.startswith('['):
+                continue
+            if l.startswith('//') or '\t' in l or re.search(r'\S {4}\S', l):
+                tsv_like = True
+                break
+        if tsv_like:
+            return self.format_names["GalTransl_TSV"]
+        # JSON
         if content.startswith('[') and content.endswith(']'):
             try:
                 data = json.loads(content)
                 if isinstance(data, list) and data and all(k in data[0] for k in ['src', 'dst', 'info']):
                     return self.format_names["AiNiee_JSON"]
-            except json.JSONDecodeError: pass
+            except json.JSONDecodeError:
+                pass
         return None
         
     def parse_input(self, content: str, format_display_name: str) -> List[Dict[str, str]]:
