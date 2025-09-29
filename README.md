@@ -8,23 +8,36 @@
 
 ## 使用方法
 
-### 安装依赖
+### 1、环境配置
+
+- **操作系统**: Windows 10 或 Windows 11 (Linux和mac上未测试)
+- **版本控制工具**: [git](https://git-scm.com/)
+- [python 3.13.7](https://www.python.org/downloads/release/python-3137/) ：不保证其它python版本能否正常运行
+
+### 2、安装依赖
 
 ```cmd
 pip install toml tk tkinterdnd2 tkhtmlview markdown
 ```
 
-### 运行脚本
+### 3、克隆本仓库
+
+```cmd
+git clone https://github.com/natsumerinchan/GPTDictEditor.git
+cd .\GPTDictEditor
+```
+
+### 3、运行脚本
 
 ```cmd
 python .\GPTDictEditor.py
 ```
 
-或直接运行`GPTDictEditor.bat`
+或双击运行`GPTDictEditor.bat`
 
 ### 详细使用教程
 
-在程序界面菜单栏的`帮助`-`使用教程`中
+[help.md](./help.md)
 
 ## 支持的翻译器及其GPT字典格式
 

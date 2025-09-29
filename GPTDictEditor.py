@@ -50,7 +50,7 @@ from typing import Optional, List, Dict, Any, Tuple
 # #####################################################################
 # 3. 全局常量定义
 # #####################################################################
-APP_VERSION = "v1.1.1"
+APP_VERSION = "v1.2.0"
 HIGHLIGHT_DELAY_MS = 250  # 语法高亮延迟时间
 
 # 统一管理格式定义，方便扩展
@@ -1282,79 +1282,14 @@ class GPTDictConverter:
         help_win.title("使用教程")
         help_win.transient(self.root)
         help_win.geometry("700x600")
-        
-        # Markdown格式的帮助信息
-        help_text_md = """
-# GPT字典编辑转换器使用教程
 
-本工具旨在为不同格式的字典/词典文件提供一个统一的编辑和转换平台。
-
-## 一、核心工作流程
-
-### 1、 **加载数据** (三选一)
-
-- **打开文件**: 点击 `打开文件` 按钮，选择一个支持的 `.json`, `.toml`, 或 `.txt` 文件。
-- **粘贴文本**: 直接将文本内容粘贴到左侧的 **“输入内容”** 框中。
-- **拖放文件**: 将文件直接从您的文件管理器拖拽到 **“输入内容”** 框中。
-
-### 2、  **选择格式**
-
-- **输入格式**: 程序会 **`自动检测`** 加载内容的格式。如果检测失败或不准确，  
-您必须从下拉菜单中 **手动指定** 正确的格式。
-- **输出格式**: 从右侧的下拉菜单中选择您想要转换的目标格式。
-
-### 3、  **执行转换**
-
-- **自动转换** (默认开启): 每当输入内容或格式选择发生变化时，程序会自动进行转换。
-- **手动转换**: 取消勾选 `自动转换` 后，需点击 `转换` 按钮来触发。
-
-### 4、  **保存结果**
-
-- 点击 `保存输出`，将右侧 **“输出内容”** 框中的结果保存为新文件。
-- 点击 `保存输入`，可将左侧 **“输入内容”** 框中的文本保存。若已打开文件，则可覆盖保存。
-
-## 二、界面与功能详解
-
-- **`清空`**: 一键清除输入和输出框的所有内容，并重置文件关联。
-- **`复制`**: 快速将对应文本框的全部内容复制到系统剪贴板。
-- **`传至输入栏`**: 将 **“输出内容”** 框中的结果发送到 **“输入内容”** 框，并自动同步格式。  
-此功能对于“链式转换”（如 A->B->C）或对转换结果进行二次编辑非常有用。
-
-## 三、高级编辑功能
-
-*这些功能主要在左侧的 **“输入内容”** 框中生效。*
-
-### **查找与替换 (`Ctrl+F`)**  
-
-- 在输入框内进行文本搜索和替换。
-- 支持 **“区分大小写”** 和强大的 **“正则表达式”** 模式。
-
-### **注释/取消注释 (`Ctrl+/`)**
-
-- 自动为当前行或选中的多行添加/移除对应格式的注释符。
-- TOML 使用 `#`，TSV 使用 `//`。(此功能对JSON格式无效)
-
-### **跳转到行 (`Ctrl+G`)**
-
-- 快速跳转到输入或输出框的指定行。
-
-### **语法高亮**
-
-- 程序会根据当前选择的格式自动对文本进行着色，提高可读性。
-- TSV 格式特殊高亮：**制表符(Tab)** 和作为分隔符的 **四个连续空格** 会显示背景色，以便明确区分。
-
-### **选中词高亮**
-
-- 在输入框中选中一段文本时，所有与之相同的内容都会被自动高亮。
-
-## 四、支持的格式说明
-
-- **`AiNiee/LinguaGacha JSON`**: JSON 数组格式，每个对象包含 `src` (原文), `dst` (译文), `info` (备注) 键。
-- **`GalTranslPP GUI TOML`**: TOML 格式，包含一个名为 `gptDict` 的表数组，每个表包含 `org`, `rep`, `note` 键。
-- **`GalTranslPP CLI TOML`**: TOML 格式，每个条目由独立的 `[[gptDict]]` 表定义，包含 `searchStr`, `replaceStr`, `note` 键。
-- **`GalTransl TSV`**: 纯文本格式，使用制表符 (Tab) 或四个空格分隔。以 `//` 开头的行为注释。
-
-        """
+        # 读取 help.md 文件内容
+        help_md_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "help.md")
+        try:
+            with open(help_md_path, "r", encoding="utf-8") as f:
+                help_text_md = f.read()
+        except Exception as e:
+            help_text_md = f"# 帮助文档加载失败\n\n无法读取 help.md 文件：{e}"
 
         main_frame = ttk.Frame(help_win, padding=10)
         main_frame.pack(expand=True, fill=tk.BOTH)
@@ -1377,7 +1312,7 @@ class GPTDictConverter:
         x = self.root.winfo_x() + (self.root.winfo_width() - help_win.winfo_width()) // 2
         y = self.root.winfo_y() + (self.root.winfo_height() - help_win.winfo_height()) // 2
         help_win.geometry(f"+{x}+{y}")
-        
+
         help_win.focus_set()
         help_win.grab_set()
 
