@@ -999,12 +999,14 @@ class GPTDictConverter:
             self.current_file_path = file_path
             detected_format = self.detect_format(content)
             self.input_format.set(detected_format if detected_format else "自动检测")
-            self.status_var.set(f"已打开: {os.path.basename(file_path)}")
+            self.status_var.set(f"已打开: {file_path}")
+            self.root.title(f"GPT字典编辑转换器   {APP_VERSION}   [已打开 {file_path}]")
             self._update_all_highlights(self.input_text)
             self.auto_convert()
         except Exception as e:
             messagebox.showerror("错误", f"打开文件失败: {str(e)}")
             self.status_var.set(f"打开失败: {e}")
+            self.root.title(f"GPT字典编辑转换器   {APP_VERSION}")
 
     def save_input_file(self):
         # 简化保存逻辑
@@ -1019,31 +1021,42 @@ class GPTDictConverter:
             if input_format_name == "自动检测":
                 detected = self.detect_format(content)
                 if detected: input_format_name = detected
-            
             format_key = self.get_format_key(input_format_name, display_name=True)
             default_ext = FORMAT_DEFINITIONS.get(format_key, {}).get("ext", ".txt")
-            
             save_path = filedialog.asksaveasfilename(
                 title="保存输入内容",
                 initialdir=self.last_directory,
                 defaultextension=default_ext,
                 filetypes=[(f"{input_format_name}", f"*{default_ext}"), ("所有文件", "*.*")]
             )
-        
         if not save_path:
             self.status_var.set("保存已取消")
             return
-        
+
+        # 如果是覆盖已有文件，弹出确认
+        if os.path.exists(save_path):
+            if not messagebox.askyesno("覆盖确认", f"文件已存在：\n{save_path}\n是否覆盖？"):
+                self.status_var.set("保存已取消")
+                return
+
         try:
             with open(save_path, 'w', encoding='utf-8') as f: f.write(content)
             self.last_directory = os.path.dirname(save_path)
             self.current_file_path = save_path
             self.input_text.edit_reset()
             self.input_text.is_modified_flag = False
-            self.status_var.set(f"文件已保存: {os.path.basename(save_path)}")
+            self.status_var.set(f"文件已保存: {save_path}")
+            self.root.title(f"GPT字典编辑转换器   {APP_VERSION} [ {save_path} ]")
         except Exception as e:
             messagebox.showerror("错误", f"保存文件失败: {str(e)}")
             self.status_var.set("保存失败")
+    def clear(self):
+        self.input_text.clear()
+        self.output_text.clear()
+        self.current_file_path = None
+        self.input_format.set("自动检测")
+        self.status_var.set("已清空")
+        self.root.title(f"GPT字典编辑转换器   {APP_VERSION}")
 
     def save_output_file(self):
         output_content = self.output_text.get_content()
