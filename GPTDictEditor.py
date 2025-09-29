@@ -209,64 +209,308 @@ class FindReplaceDialog(tk.Toplevel):
         self.regex_var = tk.BooleanVar()
         ttk.Checkbutton(option_frame, text="正则表达式", variable=self.regex_var).pack(side=tk.LEFT, padx=5)
 
+        self.status_label = ttk.Label(main_frame, text="")
+        self.status_label.grid(row=3, column=0, columnspan=3, sticky=tk.W, padx=5, pady=2)
+
         btn_frame = ttk.Frame(main_frame)
         btn_frame.grid(row=4, column=0, columnspan=3, pady=10)
         ttk.Button(btn_frame, text="查找上一个", command=self.find_previous).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="查找下一个", command=self.find_next).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="替换", command=self.replace).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="替换全部", command=self.replace_all).pack(side=tk.LEFT, padx=5)
+
+        # 绑定查找输入变化自动高亮
+        self.find_entry.bind('<KeyRelease>', lambda e: self._highlight_all_matches())
+        self.case_var.trace_add('write', lambda *a: self._highlight_all_matches())
+        self.regex_var.trace_add('write', lambda *a: self._highlight_all_matches())
     
-    def _perform_find(self, backwards=False):
+
+    def _highlight_all_matches(self, focus_index=None):
         self.target.tag_remove('found', '1.0', tk.END)
+        self.target.tag_remove('found_current', '1.0', tk.END)
         find_str = self.find_entry.get()
-        if not find_str: return
+        if not find_str:
+            self.status_label.config(text="")
+            return
+        case = self.case_var.get()
+        regex = self.regex_var.get()
+        matches = []
+        lines = self.target.get('1.0', tk.END).splitlines(keepends=True)
+        char_count = 0
         try:
-            start_pos = self.target.index(tk.SEL_FIRST) if backwards else self.target.index(tk.SEL_LAST)
-        except tk.TclError:
-            start_pos = self.target.index(tk.INSERT)
-        common_kwargs = {"nocase": not self.case_var.get(), "regexp": self.regex_var.get(), "count": self.match_len_var}
-        pos = self.target.search(find_str, start_pos, stopindex="1.0" if backwards else tk.END, backwards=backwards, **common_kwargs)
-        if not pos:
-            wrap_pos = tk.END if backwards else "1.0"
-            pos = self.target.search(find_str, wrap_pos, stopindex=start_pos, backwards=backwards, **common_kwargs)
-            if pos: messagebox.showinfo("提示", "已回绕搜索。", parent=self)
-        if pos:
-            end_pos = f"{pos} + {self.match_len_var.get()}c"
-            self._highlight_match(pos, end_pos)
-            self.target.mark_set(tk.INSERT, end_pos if not backwards else pos)
+            for line_num, line in enumerate(lines):
+                line_start_idx = f"{line_num+1}.0"
+                if regex:
+                    flags = 0 if case else re.IGNORECASE
+                    for m in re.finditer(find_str, line, flags):
+                        start = m.start()
+                        end = m.end()
+                        start_idx = self.target.index(f"{line_num+1}.{start}")
+                        end_idx = self.target.index(f"{line_num+1}.{end}")
+                        matches.append((start_idx, end_idx))
+                else:
+                    search_line = line if case else line.lower()
+                    search_str = find_str if case else find_str.lower()
+                    idx = 0
+                    while True:
+                        idx = search_line.find(search_str, idx)
+                        if idx == -1:
+                            break
+                        start_idx = self.target.index(f"{line_num+1}.{idx}")
+                        end_idx = self.target.index(f"{line_num+1}.{idx+len(find_str)}")
+                        matches.append((start_idx, end_idx))
+                        idx += len(find_str) if len(find_str) > 0 else 1
+        except re.error:
+            self.status_label.config(text="正则表达式错误")
+            return
+        for i, (start, end) in enumerate(matches):
+            self.target.tag_add('found', start, end)
+        # 当前项高亮
+        if matches:
+            cur = 0
+            if focus_index is not None:
+                cur = focus_index
+            else:
+                cursor = self.target.index(tk.INSERT)
+                for i, (start, end) in enumerate(matches):
+                    if self.target.compare(cursor, '>=', start) and self.target.compare(cursor, '<', end):
+                        cur = i
+                        break
+            self.target.tag_add('found_current', matches[cur][0], matches[cur][1])
+            self.target.see(matches[cur][0])
+            self.status_label.config(text=f"{cur+1} / {len(matches)}")
         else:
+            self.status_label.config(text="0 / 0")
+        self.target.tag_config('found', background='#ffeeba')
+        self.target.tag_config('found_current', background='#ff9800')
+
+    def _perform_find(self, backwards=False):
+        find_str = self.find_entry.get()
+        if not find_str:
+            self.status_label.config(text="")
+            return
+        case = self.case_var.get()
+        regex = self.regex_var.get()
+        matches = []
+        lines = self.target.get('1.0', tk.END).splitlines(keepends=True)
+        try:
+            for line_num, line in enumerate(lines):
+                if regex:
+                    flags = 0 if case else re.IGNORECASE
+                    for m in re.finditer(find_str, line, flags):
+                        start = m.start()
+                        end = m.end()
+                        start_idx = self.target.index(f"{line_num+1}.{start}")
+                        end_idx = self.target.index(f"{line_num+1}.{end}")
+                        matches.append((start_idx, end_idx))
+                else:
+                    search_line = line if case else line.lower()
+                    search_str = find_str if case else find_str.lower()
+                    idx = 0
+                    while True:
+                        idx = search_line.find(search_str, idx)
+                        if idx == -1:
+                            break
+                        start_idx = self.target.index(f"{line_num+1}.{idx}")
+                        end_idx = self.target.index(f"{line_num+1}.{idx+len(find_str)}")
+                        matches.append((start_idx, end_idx))
+                        idx += len(find_str) if len(find_str) > 0 else 1
+        except re.error:
+            self.status_label.config(text="正则表达式错误")
+            return
+        if not matches:
+            self.status_label.config(text="0 / 0")
             messagebox.showinfo("提示", "未找到指定内容", parent=self)
+            return
+        cursor = self.target.index(tk.INSERT)
+        cur = 0
+        for i, (start, end) in enumerate(matches):
+            if backwards:
+                if self.target.compare(cursor, '>', start):
+                    cur = i
+            else:
+                if self.target.compare(cursor, '<', start):
+                    cur = i
+                    break
+        if backwards:
+            cur = (cur - 1) % len(matches)
+        self._highlight_all_matches(focus_index=cur)
+        self.target.tag_remove(tk.SEL, '1.0', tk.END)
+        self.target.tag_add(tk.SEL, matches[cur][0], matches[cur][1])
+        self.target.mark_set(tk.INSERT, matches[cur][1])
+        self.target.see(matches[cur][0])
 
-    def _highlight_match(self, start_pos, end_pos):
-        self.target.tag_remove('found', '1.0', tk.END)
-        self.target.tag_remove(tk.SEL, "1.0", tk.END)
-        self.target.tag_add('found', start_pos, end_pos)
-        self.target.tag_add(tk.SEL, start_pos, end_pos)
-        self.target.see(start_pos)
-        self.target.focus_set()
+    # 已合并到 _highlight_all_matches
 
-    def find_next(self): self._perform_find(backwards=False)
-    def find_previous(self): self._perform_find(backwards=True)
+
+    def find_next(self):
+        self._perform_find(backwards=False)
+
+    def find_previous(self):
+        self._perform_find(backwards=True)
 
     def replace(self):
-        try:
-            sel_start, sel_end = self.target.index(tk.SEL_FIRST), self.target.index(tk.SEL_LAST)
-        except tk.TclError:
-            self.find_next()
+        # 仅替换当前高亮项
+        find_str = self.find_entry.get()
+        if not find_str:
             return
+        content = self.target.get('1.0', tk.END)
+        case = self.case_var.get()
+        regex = self.regex_var.get()
+        matches = []
+        try:
+            if regex:
+                flags = 0 if case else re.IGNORECASE
+                for m in re.finditer(find_str, content, flags):
+                    start = m.start()
+                    end = m.end()
+                    start_idx = self.target.index(f"1.0+{start}c")
+                    end_idx = self.target.index(f"1.0+{end}c")
+                    matches.append((start_idx, end_idx))
+            else:
+                search_str = find_str if case else find_str.lower()
+                idx = 0
+                while True:
+                    if case:
+                        idx = content.find(search_str, idx)
+                    else:
+                        idx = content.lower().find(search_str, idx)
+                    if idx == -1:
+                        break
+                    start_idx = self.target.index(f"1.0+{idx}c")
+                    end_idx = self.target.index(f"1.0+{idx+len(find_str)}c")
+                    matches.append((start_idx, end_idx))
+                    idx += len(find_str) if len(find_str) > 0 else 1
+        except re.error:
+            self.status_label.config(text="正则表达式错误")
+            return
+        if not matches:
+            self.status_label.config(text="0 / 0")
+            return
+        # 找到当前高亮项
+        cursor = self.target.index(tk.INSERT)
+        cur = 0
+        for i, (start, end) in enumerate(matches):
+            if self.target.compare(cursor, '>=', start) and self.target.compare(cursor, '<=', end):
+                cur = i
+                break
+        sel_start, sel_end = matches[cur]
         self.target.edit_separator()
         self.target.delete(sel_start, sel_end)
         self.target.insert(sel_start, self.replace_entry.get())
         self.target.edit_separator()
+        # 替换后匹配项可能减少，需防止cur越界
+        new_content = self.target.get('1.0', tk.END)
+        # 重新计算所有匹配
+        new_matches = []
+        try:
+            if regex:
+                flags = 0 if case else re.IGNORECASE
+                for m in re.finditer(find_str, new_content, flags):
+                    start = m.start()
+                    end = m.end()
+                    start_idx = self.target.index(f"1.0+{start}c")
+                    end_idx = self.target.index(f"1.0+{end}c")
+                    new_matches.append((start_idx, end_idx))
+            else:
+                search_str = find_str if case else find_str.lower()
+                idx2 = 0
+                while True:
+                    if case:
+                        idx2 = new_content.find(search_str, idx2)
+                    else:
+                        idx2 = new_content.lower().find(search_str, idx2)
+                    if idx2 == -1:
+                        break
+                    start_idx = self.target.index(f"1.0+{idx2}c")
+                    end_idx = self.target.index(f"1.0+{idx2+len(find_str)}c")
+                    new_matches.append((start_idx, end_idx))
+                    idx2 += len(find_str) if len(find_str) > 0 else 1
+        except re.error:
+            self.status_label.config(text="正则表达式错误")
+            return
+        if cur >= len(new_matches):
+            focus_idx = 0 if new_matches else None
+        else:
+            focus_idx = cur
+        self._highlight_all_matches(focus_index=focus_idx)
         self.find_next()
+
+
+    def _vscode_style_repl(self, repl):
+        # 返回一个可用于re.subn的repl函数，支持$1 $2...和VS Code风格转义
+        def _repl(m):
+            s = repl
+            for i in range(1, 100):
+                s = s.replace(f"${i}", m.group(i) if m.lastindex and i <= m.lastindex and m.group(i) is not None else "")
+            # VS Code风格转义
+            def _esc(m2):
+                code = m2.group(1)
+                if code == 'r': return '\r'
+                if code == 'n': return '\n'
+                if code == 't': return '\t'
+                if code == 'b': return '\b'
+                if code == 'f': return '\f'
+                if code == '\\': return '\\'
+                if code == '$': return '$'
+                if code.startswith('u') and len(code) == 5:
+                    try:
+                        return chr(int(code[1:], 16))
+                    except Exception:
+                        return m2.group(0)
+                if code.startswith('x') and len(code) == 3:
+                    try:
+                        return chr(int(code[1:], 16))
+                    except Exception:
+                        return m2.group(0)
+                return m2.group(0)
+            # 支持\\r \\n \\t \\b \\f \\\\ \\$ \\uXXXX \\xXX
+            s = re.sub(r'\\(r|n|t|b|f|\\|\$|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2})', _esc, s)
+            return s
+        return _repl
 
     def replace_all(self):
         find_text = self.find_entry.get()
-        if not find_text: return
-        self.app.replace_all(target_widget=self.target, find_text=find_text, replace_text=self.replace_entry.get(), use_regex=self.regex_var.get(), case_sensitive=self.case_var.get())
+        if not find_text:
+            return
+        replace_text = self.replace_entry.get()
+        content = self.target.get('1.0', tk.END)
+        case = self.case_var.get()
+        regex = self.regex_var.get()
+        try:
+            if regex:
+                flags = 0 if case else re.IGNORECASE
+                lines = content.splitlines(keepends=True)
+                new_lines = []
+                total_count = 0
+                for line in lines:
+                    new_line, count = re.subn(find_text, self._vscode_style_repl(replace_text), line, flags=flags)
+                    new_lines.append(new_line)
+                    total_count += count
+                new_content = ''.join(new_lines)
+            else:
+                if not case:
+                    flags = re.IGNORECASE
+                    new_content, total_count = re.subn(re.escape(find_text), replace_text, content, flags=flags)
+                else:
+                    total_count = content.count(find_text)
+                    new_content = content.replace(find_text, replace_text)
+        except re.error as e:
+            self.status_label.config(text="正则表达式错误")
+            messagebox.showerror("正则表达式错误", str(e))
+            return
+        if total_count > 0:
+            self.target.set_content(new_content)
+            self._highlight_all_matches()
+            self.status_label.config(text=f"已完成 {total_count} 处替换。")
+            messagebox.showinfo("成功", f"已完成 {total_count} 处替换。")
+        else:
+            self.status_label.config(text="未找到可替换的内容。")
+            messagebox.showinfo("提示", "未找到可替换的内容。")
 
     def close_dialog(self):
         self.target.tag_remove('found', '1.0', tk.END)
+        self.target.tag_remove('found_current', '1.0', tk.END)
         self.destroy()
 
 class GoToLineDialog(tk.Toplevel):
