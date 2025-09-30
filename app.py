@@ -19,11 +19,12 @@ import toml
 
 # 从项目模块导入
 from constants import APP_VERSION, FORMAT_DEFINITIONS
+from ui.main_window import MainWindowUI
 from ui.custom_widgets import EditorWithLineNumbers
 from ui.dialogs.find_replace import FindReplaceDialog
 from ui.dialogs.go_to_line import GoToLineDialog
 from core import conversion, syntax
-from utils import file_io
+from utils import file_io, settings
 
 # #####################################################################
 # 2. 主应用程序类
@@ -36,13 +37,18 @@ class GPTDictConverter:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title(f"GPT字典编辑转换器   {APP_VERSION}")
-        self.root.geometry("1000x600")
+        
+        # 加载设置
+        self.settings = settings.load_settings()
+        
+        self.root.geometry(self.settings.get("geometry", "1000x600"))
         self.root.protocol("WM_DELETE_WINDOW", self.ask_quit)
         
         # 初始化状态变量
         self.APP_VERSION = APP_VERSION
         self.current_file_path: Optional[str] = None
-        self.last_directory: str = os.path.expanduser("~")
+        self.last_directory: str = self.settings.get("last_directory", os.path.expanduser("~"))
+        
         
         # 从常量中提取格式名称用于UI
         self.format_names = {k: v["name"] for k, v in FORMAT_DEFINITIONS.items()}
@@ -51,119 +57,12 @@ class GPTDictConverter:
         self.syntax_handler = syntax.SyntaxHandler(self)
         self.file_handler = file_io.FileHandler(self)
 
-        # 创建UI组件
-        self._create_menu()
-        self._create_widgets()
+        # 实例化UI构建器
+        self.ui = MainWindowUI(self)
         
         # 设置编辑器功能和拖放
         self.syntax_handler.setup_editor_features()
         self.file_handler.setup_dnd()
-
-
-    def _create_widgets(self):
-        """创建应用程序的主窗口组件。"""
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky="nsew")
-        
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(1, weight=1)
-        
-        # --- 顶部控制区 ---
-        top_control_frame = ttk.Frame(main_frame)
-        top_control_frame.grid(row=0, column=0, columnspan=2, pady=5, sticky="ew")
-        
-        format_frame = ttk.Frame(top_control_frame)
-        format_frame.pack(side=tk.LEFT, padx=10)
-        
-        # --- 输入格式 ---
-        ttk.Label(format_frame, text="输入格式:").pack(anchor=tk.W)
-        self.input_format = ttk.Combobox(format_frame, values=["自动检测"] + list(self.format_names.values()), state="readonly", width=25)
-        self.input_format.set("自动检测")
-        self.input_format.pack(pady=2)
-        
-        # --- 输出格式 [修正] ---
-        # 下面这两行是之前缺失或错误放置的代码
-        ttk.Label(format_frame, text="输出格式:").pack(anchor=tk.W, pady=(5, 0))
-        self.output_format = ttk.Combobox(format_frame, values=list(self.format_names.values()), state="readonly", width=25)
-        self.output_format.set(self.format_names["GPPGUI_TOML"])
-        self.output_format.pack(pady=2)
-        self.output_format.bind("<<ComboboxSelected>>", self.auto_convert)
-
-        # --- 按钮区域 ---
-        button_frame = ttk.Frame(top_control_frame)
-        button_frame.pack(side=tk.LEFT, padx=20, anchor='n')
-        
-        btn_grid = ttk.Frame(button_frame)
-        btn_grid.pack()
-        ttk.Button(btn_grid, text="打开文件", command=self.file_handler.open_file).grid(row=0, column=0, padx=5, pady=2)
-        ttk.Button(btn_grid, text="保存输入", command=self.file_handler.save_input_file).grid(row=0, column=1, padx=5, pady=2)
-        ttk.Button(btn_grid, text="保存输出", command=self.file_handler.save_output_file).grid(row=0, column=2, padx=5, pady=2)
-        ttk.Button(btn_grid, text="转换", command=self.convert).grid(row=1, column=0, padx=5, pady=2)
-        ttk.Button(btn_grid, text="清空", command=self.clear).grid(row=1, column=1, padx=5, pady=2)
-        
-        self.auto_convert_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(button_frame, text="打开文件时自动转换", variable=self.auto_convert_var).pack(pady=5)
-        
-        # --- 内容编辑区 ---
-        content_frame = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
-        content_frame.grid(row=1, column=0, columnspan=2, sticky="nsew")
-
-        input_pane = ttk.Frame(content_frame)
-        input_header = ttk.Frame(input_pane)
-        input_header.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(input_header, text="输入内容 (可拖入文件):").pack(side=tk.LEFT, anchor=tk.W)
-        ttk.Button(input_header, text="复制", command=self.copy_input).pack(side=tk.LEFT, padx=10)
-        self.input_text = EditorWithLineNumbers(input_pane, borderwidth=1, relief="solid")
-        self.input_text.pack(expand=True, fill=tk.BOTH)
-        
-        output_pane = ttk.Frame(content_frame)
-        output_header = ttk.Frame(output_pane)
-        output_header.pack(fill=tk.X, pady=(0, 5))
-        ttk.Label(output_header, text="输出内容:").pack(side=tk.LEFT, anchor=tk.W)
-        ttk.Button(output_header, text="复制", command=self.copy_output).pack(side=tk.LEFT, padx=10)
-        ttk.Button(output_header, text="传至输入栏", command=self.transfer_output_to_input).pack(side=tk.LEFT)
-        self.output_text = EditorWithLineNumbers(output_pane, state=tk.DISABLED, borderwidth=1, relief="solid")
-        self.output_text.pack(expand=True, fill=tk.BOTH)
-
-        content_frame.add(input_pane, weight=1)
-        content_frame.add(output_pane, weight=1)
-        
-        # --- 状态栏 ---
-        self.status_var = tk.StringVar(value="就绪")
-        ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5, 0))
-
-        # --- 编辑器共享样式 ---
-        editor_style = {
-            "font": ("Consolas", 10), "background": "#FFFFFF", "foreground": "#000000",
-            "insertbackground": "black", "selectbackground": "#ADD6FF", "selectforeground": "black",
-            "inactiveselectbackground": "#E5E5E5", "insertwidth": 2, "padx": 5, "pady": 5,
-        }
-        self.input_text.config(**editor_style)
-        self.output_text.config(**editor_style)
-
-    def _create_menu(self):
-        """创建应用程序的顶部菜单栏。"""
-        self.menu_bar = tk.Menu(self.root)
-        self.root.config(menu=self.menu_bar)
-        
-        edit_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.menu_bar.add_cascade(label="编辑", menu=edit_menu)
-        edit_menu.add_command(label="查找与替换 (Ctrl+F)", command=self._show_find_replace_dialog)
-        edit_menu.add_command(label="跳转到行... (Ctrl+G)", command=self._show_goto_line_dialog)
-        
-        help_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.menu_bar.add_cascade(label="帮助", menu=help_menu)
-        help_menu.add_command(label="使用教程", command=self._show_help_dialog)
-        
-        about_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.menu_bar.add_cascade(label="关于", menu=about_menu)
-        about_menu.add_command(label="关于本软件", command=self._show_about_dialog)
-        
-        self.root.bind_all("<Control-f>", self._show_find_replace_dialog)
-        self.root.bind_all("<Control-g>", self._show_goto_line_dialog)
 
     def convert(self):
         """执行格式转换。"""
@@ -204,9 +103,11 @@ class GPTDictConverter:
         except (ValueError, json.JSONDecodeError, toml.TomlDecodeError) as e:
             messagebox.showerror("处理失败", str(e))
             self.status_var.set(f"处理失败: {e}")
+            self.output_text.clear() # 转换失败时清空输出
         except Exception as e:
             messagebox.showerror("未知错误", f"发生未知错误: {str(e)}")
             self.status_var.set("发生未知错误")
+            self.output_text.clear() # 转换失败时清空输出
 
     def auto_convert(self, event=None):
         if self.auto_convert_var.get():
@@ -251,11 +152,20 @@ class GPTDictConverter:
             self.status_var.set("输出内容为空")
 
     def ask_quit(self):
+        """退出前确认并保存设置。"""
         if self.input_text.is_modified_flag:
-            if messagebox.askyesno("退出确认", "输入内容已被修改但未保存，确定要退出吗？"):
-                self.root.destroy()
-        else:
-            self.root.destroy()
+            if not messagebox.askyesno("退出确认", "输入内容已被修改但未保存，确定要退出吗？"):
+                return
+
+        # 保存当前设置
+        current_settings = {
+            "geometry": self.root.winfo_geometry(),
+            "last_directory": self.last_directory,
+            "auto_convert": self.auto_convert_var.get(),
+        }
+        settings.save_settings(current_settings)
+        
+        self.root.destroy()
 
     def _show_find_replace_dialog(self, event=None):
         FindReplaceDialog(self.root, self.input_text, app_instance=self)

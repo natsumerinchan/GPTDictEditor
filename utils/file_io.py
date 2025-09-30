@@ -40,6 +40,7 @@ class FileHandler:
         file_path = event.data.strip('{}')
         if os.path.isfile(file_path):
             self._open_file_path(file_path)
+            self.app.last_directory = os.path.dirname(file_path) # 记忆上次打开的目录
 
     def open_file(self):
         """
@@ -57,8 +58,8 @@ class FileHandler:
             ]
         )
         if file_path:
-            self.app.last_directory = os.path.dirname(file_path) # 记忆上次打开的目录
             self._open_file_path(file_path)
+            self.app.last_directory = os.path.dirname(file_path) # 记忆上次打开的目录
 
     def _open_file_path(self, file_path: str):
         """
