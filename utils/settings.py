@@ -1,11 +1,11 @@
 # utils/settings.py
 import json
-import os
+from pathlib import Path
 
 SETTINGS_FILE = "settings.json"
 DEFAULT_SETTINGS = {
     "geometry": "1000x600",
-    "last_directory": os.path.expanduser("~"),
+    "last_directory": str(Path.home()),
     "auto_convert": True,
 }
 
@@ -14,10 +14,11 @@ def load_settings():
     加载JSON配置文件。
     如果文件不存在或格式错误，则返回默认设置。
     """
-    if not os.path.exists(SETTINGS_FILE):
+    settings_path = Path(SETTINGS_FILE)
+    if not settings_path.exists():
         return DEFAULT_SETTINGS
     try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+        with open(settings_path, "r", encoding="utf-8") as f:
             settings = json.load(f)
             # 确保所有默认键都存在，防止配置文件不完整
             for key, value in DEFAULT_SETTINGS.items():

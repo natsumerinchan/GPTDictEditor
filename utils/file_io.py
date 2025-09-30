@@ -4,6 +4,7 @@
 """
 
 import os
+from pathlib import Path
 from tkinter import filedialog, messagebox
 from tkinterdnd2 import DND_FILES
 
@@ -37,16 +38,17 @@ class FileHandler:
             event: 拖放事件对象。
         """
         # event.data 通常是带有花括号的文件路径，需要清理
-        file_path = event.data.strip('{}')
-        if os.path.isfile(file_path):
-            self._open_file_path(file_path)
-            self.app.last_directory = os.path.dirname(file_path) # 记忆上次打开的目录
+        file_path_str = event.data.strip('{}')
+        file_path = Path(file_path_str)
+        if file_path.is_file():
+            self._open_file_path(str(file_path))
+            self.app.last_directory = str(file_path.parent) # 记忆上次打开的目录
 
     def open_file(self):
         """
         显示文件选择对话框，并加载用户选择的文件。
         """
-        file_path = filedialog.askopenfilename(
+        file_path_str = filedialog.askopenfilename(
             title="选择文件",
             initialdir=self.app.last_directory,
             filetypes=[
@@ -57,9 +59,9 @@ class FileHandler:
                 ("所有文件", "*.*")
             ]
         )
-        if file_path:
-            self._open_file_path(file_path)
-            self.app.last_directory = os.path.dirname(file_path) # 记忆上次打开的目录
+        if file_path_str:
+            self._open_file_path(file_path_str)
+            self.app.last_directory = str(Path(file_path_str).parent) # 记忆上次打开的目录
 
     def _open_file_path(self, file_path: str):
         """
@@ -83,7 +85,7 @@ class FileHandler:
             self.app.input_format.set(detected_format_name if detected_format_name else "自动检测")
             
             # 更新状态栏和窗口标题
-            self.app.status_var.set(f"已打开: {os.path.basename(file_path)}")
+            self.app.status_var.set(f"已打开: {Path(file_path).name}")
             self.app.root.title(f"GPT字典编辑转换器   {self.app.APP_VERSION}   [已打开 {file_path} ]")
             
             # 触发语法高亮和自动转换
@@ -103,21 +105,22 @@ class FileHandler:
             return
 
         # 如果当前已打开文件，则默认保存到该文件，否则弹出另存为对话框
-        save_path = self.app.current_file_path
-        if not save_path:
-            save_path = self._get_save_path(is_input=True)
+        save_path_str = self.app.current_file_path
+        if not save_path_str:
+            save_path_str = self._get_save_path(is_input=True)
         
-        if not save_path:
+        if not save_path_str:
             self.app.status_var.set("保存已取消")
             return
 
         # 写入文件
         try:
+            save_path = Path(save_path_str)
             with open(save_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            self.app.last_directory = os.path.dirname(save_path)
-            self.app.current_file_path = save_path
+            self.app.last_directory = str(save_path.parent)
+            self.app.current_file_path = str(save_path)
             self.app.input_text.edit_reset() # 清除撤销历史
             self.app.input_text.is_modified_flag = False
             
@@ -136,16 +139,17 @@ class FileHandler:
             messagebox.showwarning("警告", "输出内容为空，无法保存")
             return
 
-        save_path = self._get_save_path(is_input=False)
-        if not save_path:
+        save_path_str = self._get_save_path(is_input=False)
+        if not save_path_str:
             self.app.status_var.set("保存已取消")
             return
 
         try:
+            save_path = Path(save_path_str)
             with open(save_path, 'w', encoding='utf-8') as f:
                 f.write(output_content)
-            self.app.last_directory = os.path.dirname(save_path)
-            self.app.status_var.set(f"已保存输出: {os.path.basename(save_path)}")
+            self.app.last_directory = str(save_path.parent)
+            self.app.status_var.set(f"已保存输出: {save_path.name}")
         except Exception as e:
             messagebox.showerror("错误", f"保存输出内容失败: {str(e)}")
 
@@ -177,8 +181,8 @@ class FileHandler:
         initial_file = None
         # 为输出文件生成一个建议的文件名
         if not is_input and self.app.current_file_path:
-            base, _ = os.path.splitext(os.path.basename(self.app.current_file_path))
-            initial_file = base + default_ext
+            current_path = Path(self.app.current_file_path)
+            initial_file = current_path.stem + default_ext
 
         return filedialog.asksaveasfilename(
             title=title,

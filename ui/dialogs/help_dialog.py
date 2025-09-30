@@ -1,6 +1,6 @@
-import os
 import tkinter as tk
 from tkinter import ttk
+from pathlib import Path
 
 import markdown
 from tkhtmlview import HTMLScrolledText
@@ -13,9 +13,9 @@ def show_help_dialog(parent):
     help_win.geometry("700x600")
     
     try:
-        # 使用相对路径定位 help.md
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        help_md_path = os.path.join(base_dir, "../../docs/help.md")
+        # 使用 pathlib 定位 help.md
+        base_dir = Path(__file__).resolve().parent
+        help_md_path = base_dir / "../../docs/help.md"
         with open(help_md_path, "r", encoding="utf-8") as f:
             help_text_md = f.read()
     except Exception as e:

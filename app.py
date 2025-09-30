@@ -5,6 +5,7 @@
 # 标准库导入
 import os
 import sys
+from pathlib import Path
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 import tkinter.font as tkFont
@@ -49,7 +50,7 @@ class GPTDictConverter:
         # 初始化状态变量
         self.APP_VERSION = APP_VERSION
         self.current_file_path: Optional[str] = None
-        self.last_directory: str = self.settings.get("last_directory", os.path.expanduser("~"))
+        self.last_directory: str = self.settings.get("last_directory", str(Path.home()))
         
         
         # 从常量中提取格式名称用于UI
