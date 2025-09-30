@@ -23,6 +23,7 @@ from ui.main_window import MainWindowUI
 from ui.custom_widgets import EditorWithLineNumbers
 from ui.dialogs.find_replace import FindReplaceDialog
 from ui.dialogs.go_to_line import GoToLineDialog
+from ui.dialogs import about_dialog, help_dialog
 from core import conversion, syntax
 from utils import file_io, settings
 
@@ -175,52 +176,10 @@ class GPTDictConverter:
         GoToLineDialog(self.root, app_instance=self)
         return "break"
 
-    def _show_about_dialog(self):
-        about_win = tk.Toplevel(self.root)
-        about_win.title("关于")
-        about_win.transient(self.root)
-        about_win.geometry("420x240"); about_win.resizable(False, False)
-        main_frame = ttk.Frame(about_win, padding="15")
-        main_frame.pack(expand=True, fill=tk.BOTH)
-        ttk.Label(main_frame, text="GPT字典编辑转换器", font=("", 12, "bold")).pack(pady=(0, 10))
-        ttk.Label(main_frame, text=f"版本: {self.APP_VERSION}").pack(pady=2)
-        link_font = tkFont.Font(family="Helvetica", size=10, underline=True)
-        author_frame = ttk.Frame(main_frame); author_frame.pack(pady=2)
-        ttk.Label(author_frame, text="作者: ").pack(side=tk.LEFT)
-        author_link = ttk.Label(author_frame, text="natsumerinchan", foreground="blue", cursor="hand2", font=link_font)
-        author_link.pack(side=tk.LEFT)
-        author_link.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/natsumerinchan"))
-        license_frame = ttk.Frame(main_frame); license_frame.pack(pady=2)
-        ttk.Label(license_frame, text="开源许可证: ").pack(side=tk.LEFT)
-        license_link = ttk.Label(license_frame, text="MIT License", foreground="blue", cursor="hand2", font=link_font)
-        license_link.pack(side=tk.LEFT)
-        license_link.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/natsumerinchan/GPTDictEditor/blob/master/LICENSE"))
-        repo_link = ttk.Label(main_frame, text="https://github.com/natsumerinchan/GPTDictEditor", foreground="blue", cursor="hand2", font=link_font)
-        repo_link.pack(pady=10)
-        repo_link.bind("<Button-1>", lambda e: webbrowser.open_new("https://github.com/natsumerinchan/GPTDictEditor"))
-        ttk.Button(main_frame, text="确定", command=about_win.destroy).pack(pady=15)
-        about_win.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - about_win.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - about_win.winfo_height()) // 2
-        about_win.geometry(f"+{x}+{y}")
-        about_win.focus_set(); about_win.grab_set()
+    def show_about_dialog(self):
+        """显示关于对话框。"""
+        about_dialog.show_about_dialog(self.root, self.APP_VERSION)
     
-    def _show_help_dialog(self):
-        help_win = tk.Toplevel(self.root)
-        help_win.title("使用教程"); help_win.transient(self.root); help_win.geometry("700x600")
-        try:
-            help_md_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "./docs/help.md")
-            with open(help_md_path, "r", encoding="utf-8") as f: help_text_md = f.read()
-        except Exception as e:
-            help_text_md = f"# 帮助文档加载失败\n\n无法读取 help.md 文件：{e}"
-        main_frame = ttk.Frame(help_win, padding=10); main_frame.pack(expand=True, fill=tk.BOTH)
-        html_content = markdown.markdown(help_text_md, extensions=['fenced_code', 'tables'])
-        html_text = HTMLScrolledText(main_frame, background="white"); html_text.pack(expand=True, fill=tk.BOTH)
-        html_text.set_html(html_content)
-        button_frame = ttk.Frame(help_win, padding=(0, 0, 0, 10)); button_frame.pack(fill=tk.X)
-        ttk.Button(button_frame, text="关闭", command=help_win.destroy).pack()
-        help_win.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() - help_win.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - help_win.winfo_height()) // 2
-        help_win.geometry(f"+{x}+{y}")
-        help_win.focus_set(); help_win.grab_set()
+    def show_help_dialog(self):
+        """显示帮助对话框。"""
+        help_dialog.show_help_dialog(self.root)

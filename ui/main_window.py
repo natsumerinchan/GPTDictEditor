@@ -112,11 +112,11 @@ class MainWindowUI:
         
         help_menu = tk.Menu(self.app.menu_bar, tearoff=0)
         self.app.menu_bar.add_cascade(label="帮助", menu=help_menu)
-        help_menu.add_command(label="使用教程", command=self.app._show_help_dialog)
+        help_menu.add_command(label="使用教程", command=self.app.show_help_dialog)
         
         about_menu = tk.Menu(self.app.menu_bar, tearoff=0)
         self.app.menu_bar.add_cascade(label="关于", menu=about_menu)
-        about_menu.add_command(label="关于本软件", command=self.app._show_about_dialog)
+        about_menu.add_command(label="关于本软件", command=self.app.show_about_dialog)
         
         self.root.bind_all("<Control-f>", self.app._show_find_replace_dialog)
         self.root.bind_all("<Control-g>", self.app._show_goto_line_dialog)
