@@ -4,3 +4,6 @@
 /ui/dialogs/__pycache__
 /utils/__pycache__
 settings.json
+/build
+/dist
+*.spec

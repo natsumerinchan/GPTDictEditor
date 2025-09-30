@@ -36,9 +36,17 @@ python .\main.py
 
 或双击运行`run.bat`
 
-### 5、详细使用教程
+### 5、打包为exe（可选）
 
-[help.md](./help.md)
+```cmd
+pip install pyinstaller
+
+pyinstaller --noconfirm --onefile --windowed --add-data "docs/help.md;docs" --name "GPT字典编辑转换器" main.py
+```
+
+### 6、详细使用教程
+
+详见[help.md](./help.md)
 
 ## 支持的翻译器及其GPT字典格式
 
