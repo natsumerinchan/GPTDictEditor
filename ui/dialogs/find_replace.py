@@ -135,6 +135,15 @@ class FindReplaceDialog(ttk.Toplevel):
         self.target.tag_config('found', background='#ffeeba')
         self.target.tag_config('found_current', background='#ff9800')
 
+    def _find_next_match_index(self, current_index, backwards, num_matches):
+        """计算下一个匹配项的索引。"""
+        if num_matches == 0:
+            return -1
+        if backwards:
+            return (current_index - 1 + num_matches) % num_matches
+        else:
+            return (current_index + 1) % num_matches
+
     def _perform_find(self, backwards=False):
         """执行查找操作的核心逻辑。"""
         matches = self._find_all_matches()
@@ -145,43 +154,61 @@ class FindReplaceDialog(ttk.Toplevel):
         cursor_pos = self.target.index(tk.INSERT)
         
         current_match_index = -1
+        # 查找光标当前所在的匹配项
         for i, match in enumerate(matches):
-             if self.target.compare(cursor_pos, '>', match['start']) and \
-                self.target.compare(cursor_pos, '<=', match['end']):
+            if self.target.compare(cursor_pos, '>=', match['start']) and \
+               self.target.compare(cursor_pos, '<', match['end']):
                 current_match_index = i
                 break
-
-        if backwards:
-            next_match_index = (current_match_index - 1 + len(matches)) % len(matches)
-        else:
-            if current_match_index != -1:
-                 next_match_index = (current_match_index + 1) % len(matches)
-            else:
-                next_match_index = 0
-                for i, match in enumerate(matches):
-                    if self.target.compare(match['start'], '>=', cursor_pos):
-                        next_match_index = i
-                        break
-
-        self._highlight_all_matches(focus_index=next_match_index)
         
-        match_to_select = matches[next_match_index]
-        self.target.tag_remove(tk.SEL, '1.0', tk.END)
-        self.target.tag_add(tk.SEL, match_to_select['start'], match_to_select['end'])
-        self.target.mark_set(tk.INSERT, match_to_select['end'])
-        self.target.see(match_to_select['start'])
+        # 如果光标不在任何匹配项内，根据查找方向确定下一个
+        if current_match_index == -1:
+            if backwards:
+                # 从后往前找第一个起始位置在光标前的
+                for i in range(len(matches) - 1, -1, -1):
+                    if self.target.compare(cursor_pos, '>', matches[i]['start']):
+                        current_match_index = i
+                        break
+                # 如果没找到（光标在所有匹配项之前），则从最后一个开始，这样-1后就是倒数第二个
+                if current_match_index == -1: 
+                    current_match_index = 0
+            else:
+                # 从前往后找第一个起始位置在光标后的
+                for i, match in enumerate(matches):
+                    if self.target.compare(cursor_pos, '<=', match['start']):
+                        # 我们希望从这个匹配项开始，所以将当前索引设置为它之前的一个
+                        current_match_index = i - 1
+                        break
+                # 如果循环结束还没找到，说明光标在最后一个匹配之后, 准备从头开始
+                else:
+                    current_match_index = len(matches) - 1
+        
+        next_match_index = self._find_next_match_index(current_match_index, backwards, len(matches))
+
+        if next_match_index != -1:
+            match_to_show = matches[next_match_index]
+            self.target.see(match_to_show['start'])
+            # see之后立即更新，否则光标位置可能不正确
+            self.target.update_idletasks() 
+            # 将光标移动到新匹配项的开头
+            self.target.mark_set(tk.INSERT, match_to_show['start'])
+            self._highlight_all_matches(focus_index=next_match_index)
+        else:
+            messagebox.showinfo("提示", "未找到指定内容", parent=self)
 
     def find_next(self):
+        """查找下一个匹配项。"""
         self._perform_find(backwards=False)
 
     def find_previous(self):
+        """查找上一个匹配项。"""
         self._perform_find(backwards=True)
 
     def _python_style_repl(self, repl: str):
         """
-        将替换字符串从VS Code风格($1)转换为Python风格(\1)，
+        将替换字符串从VS Code风格($1)转换为Python风格(\\1)，
         以便re.sub/subn可以原生处理所有Python正则替换语法，
-        包括命名捕获组 \g<name>。
+        包括命名捕获组 \\g<name>。
         """
         # 将 $1, $2 ... 转换为 \1, \2 ...
         # 使用一个函数来替换，避免替换$10时错误地匹配$1
