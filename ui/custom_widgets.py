@@ -22,7 +22,7 @@ class EditorWithLineNumbers(tk.Frame):
         super().__init__(master)
         
         # 从kwargs中提取字体，如果未提供则使用默认值
-        self.text_font = kwargs.get('font', ("Consolas", 10))
+        self.text_font = kwargs.get('font', ("黑体", 10))
         
         # 配置网格布局
         self.grid_rowconfigure(0, weight=1)

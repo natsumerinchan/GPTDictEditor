@@ -41,7 +41,7 @@ python .\main.py
 ```cmd
 pip install pyinstaller
 
-pyinstaller --noconfirm --onefile --windowed --add-data "docs/help.md;docs" --name "GPT字典编辑转换器" main.py
+pyinstaller --noconfirm --onefile --windowed --add-data "docs/help.md;docs" --name "GPTDictEditor" main.py
 ```
 
 ### 6、详细使用教程

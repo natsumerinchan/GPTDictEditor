@@ -23,7 +23,7 @@ HIGHLIGHT_DELAY_MS = 250
 # 3. UI相关常量
 # #####################################################################
 EDITOR_STYLE = {
-    "font": ("Consolas", 10),
+    "font": ("黑体", 10),
     "background": "#FFFFFF",
     "foreground": "#000000",
     "insertbackground": "black",
