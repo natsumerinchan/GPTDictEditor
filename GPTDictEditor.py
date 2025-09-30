@@ -511,7 +511,10 @@ class FindReplaceDialog(tk.Toplevel):
             messagebox.showerror("正则表达式错误", str(e))
             return
         if total_count > 0:
-            self.target.set_content(new_content)
+            self.target.edit_separator()
+            self.target.delete('1.0', tk.END)
+            self.target.insert('1.0', new_content)
+            self.target.edit_separator()
             self._highlight_all_matches()
             self.status_label.config(text=f"已完成 {total_count} 处替换。")
             messagebox.showinfo("成功", f"已完成 {total_count} 处替换。")
