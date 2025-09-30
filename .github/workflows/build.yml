@@ -1,0 +1,37 @@
+name: Build GPTDictEditor
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v5
+    
+    - name: Set up Python 3.13.7
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.13.7"
+      
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r .\requirements.txt
+        pip install pyinstaller
+
+    - name: Build GPTDictEditor
+      run: |
+        pyinstaller --noconfirm --onefile --windowed --add-data "docs/help.md;docs" --name "GPTDictEditor" main.py
+    
+    - name: Upload GPTDictEditor
+      uses: actions/upload-artifact@v4
+      with:
+        name: GPTDictEditor
+        path: dist/*
