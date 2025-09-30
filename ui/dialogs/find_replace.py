@@ -177,33 +177,16 @@ class FindReplaceDialog(ttk.Toplevel):
     def find_previous(self):
         self._perform_find(backwards=True)
 
-    def _vscode_style_repl(self, repl: str):
-        """返回一个可用于re.sub/subn的替换函数。"""
-        def _repl(m: re.Match) -> str:
-            s = repl
-            for i in range(1, 100):
-                group_val = m.group(i) if m.lastindex and i <= m.lastindex else ""
-                s = s.replace(f"${i}", group_val if group_val is not None else "")
-
-            def _esc(m2: re.Match) -> str:
-                code = m2.group(1)
-                if code == 'r': return '\r'
-                if code == 'n': return '\n'
-                if code == 't': return '\t'
-                if code == 'b': return '\b'
-                if code == 'f': return '\f'
-                if code == '\\': return '\\'
-                if code == '$': return '$'
-                if code.startswith('u') and len(code) == 5:
-                    try: return chr(int(code[1:], 16))
-                    except Exception: return m2.group(0)
-                if code.startswith('x') and len(code) == 3:
-                    try: return chr(int(code[1:], 16))
-                    except Exception: return m2.group(0)
-                return m2.group(0)
-
-            return re.sub(r'\\(r|n|t|b|f|\\|\$|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2})', _esc, s)
-        return _repl
+    def _python_style_repl(self, repl: str):
+        """
+        将替换字符串从VS Code风格($1)转换为Python风格(\1)，
+        以便re.sub/subn可以原生处理所有Python正则替换语法，
+        包括命名捕获组 \g<name>。
+        """
+        # 将 $1, $2 ... 转换为 \1, \2 ...
+        # 使用一个函数来替换，避免替换$10时错误地匹配$1
+        s = re.sub(r'\$(\d+)', r'\\\1', repl)
+        return s
 
     def replace(self):
         """替换当前选中的匹配项，并自动查找下一个。"""
@@ -228,8 +211,9 @@ class FindReplaceDialog(ttk.Toplevel):
             if not case:
                 flags |= re.IGNORECASE
             
-            replacer = self._vscode_style_repl(replace_str)
-            new_text = re.sub(find_str, replacer, original_text, count=1, flags=flags)
+            # 获取Python风格的替换字符串
+            py_replace_str = self._python_style_repl(replace_str)
+            new_text = re.sub(find_str, py_replace_str, original_text, count=1, flags=flags)
             self.target.delete(sel_start, sel_end)
             self.target.insert(sel_start, new_text)
         else:
@@ -257,9 +241,10 @@ class FindReplaceDialog(ttk.Toplevel):
                 flags = re.MULTILINE
                 if not case:
                     flags |= re.IGNORECASE
-                    
-                replacer = self._vscode_style_repl(replace_text)
-                new_content, total_count = re.subn(find_text, replacer, content, flags=flags)
+                
+                # 获取Python风格的替换字符串
+                py_replace_str = self._python_style_repl(replace_text)
+                new_content, total_count = re.subn(find_text, py_replace_str, content, flags=flags)
             else:
                 if not case:
                     flags = re.IGNORECASE
