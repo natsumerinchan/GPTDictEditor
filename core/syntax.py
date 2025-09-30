@@ -30,13 +30,18 @@ class SyntaxHandler:
         """
         # 统一配置标签颜色
         tag_colors = {
-            "key": "#0000FF", "string": "#A31515", "punc": "#000000",
-            "comment": "#008000", "tsv_tab": {"background": "#E0E8F0"},
+            "key": "#A31515",  # JSON/TOML的键，深红色
+            "string": "#0000FF",  # 字符串，蓝色
+            "number": "#098658",  # 数字，绿色
+            "boolean_null": "#0000FF",  # 布尔/null，蓝色
+            "punc": "#000000",
+            "comment": "#008000",  # 注释，绿色
+            "tsv_tab": {"background": "#E0E8F0"},
             "tsv_space_delimiter": {"background": "#E0E8F0"},
             "highlight_duplicate": {"background": "#B4D5FF"},
-            "found": {"background": "#FFD700"}, # 查找对话框使用
-            "found_current": {"background": "#ff9800"}, # 查找对话框使用
-            "goto_line": {"background": "#FFFACD"}, # 跳转对话框使用
+            "found": {"background": "#FFD700"},  # 查找对话框使用
+            "found_current": {"background": "#ff9800"},  # 查找对话框使用
+            "goto_line": {"background": "#FFFACD"},  # 跳转对话框使用
         }
         
         widgets = [self.app.input_text, self.app.output_text]
@@ -123,7 +128,7 @@ class SyntaxHandler:
     def _apply_syntax_highlighting(self, widget: EditorWithLineNumbers):
         """对指定的编辑器应用语法高亮。"""
         # 清除旧的语法标签
-        all_tags = ["key", "string", "punc", "comment", "tsv_tab", "tsv_space_delimiter"]
+        all_tags = ["key", "string", "punc", "comment", "tsv_tab", "tsv_space_delimiter", "number", "boolean_null"]
         for tag in all_tags:
             widget.tag_remove(tag, "1.0", tk.END)
         
@@ -137,11 +142,14 @@ class SyntaxHandler:
             'BASE': [
                 ('COMMENT', r'#.*$'),
                 ('STRING', r'"([^"\\]*(?:\\.[^"\\]*)*)"'),
+                ('NUMBER', r'\b-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\b'),
+                ('BOOLEAN_NULL', r'\b(true|false|null)\b'),
                 ('PUNC', r'[\[\]{},=:]'),
             ],
             'GPPGUI_TOML': [('KEY', r'\b(org|rep|note)\b(?=\s*=)')],
             'GPPCLI_TOML': [('KEY', r'\b(note|replaceStr|searchStr)\b(?=\s*=)')],
-            'AiNiee_JSON': [('KEY', r'"(src|dst|info)"(?=\s*:)')],
+            # 匹配 JSON 中所有在冒号前的键
+            'AiNiee_JSON': [('KEY', r'"([^"\\]*(?:\\.[^"\\]*)*)"(?=\s*:)')],
             'GalTransl_TSV': [
                 ('COMMENT', r'//.*$'),
                 ('TSV_TAB', r'\t'),
@@ -150,8 +158,14 @@ class SyntaxHandler:
         }
         
         # 根据格式选择正确的规则集
-        current_specs = token_specs['BASE'] + token_specs.get(format_key, []) \
-                        if format_key != 'GalTransl_TSV' else token_specs['GalTransl_TSV']
+        # 将特定格式的规则放在前面，以保证更高的匹配优先级
+        specific_specs = token_specs.get(format_key, [])
+        base_specs = token_specs['BASE']
+        
+        if format_key == 'GalTransl_TSV':
+            current_specs = specific_specs
+        else:
+            current_specs = specific_specs + base_specs
 
         try:
             tok_regex = '|'.join('(?P<%s>%s)' % pair for pair in current_specs)
@@ -166,7 +180,8 @@ class SyntaxHandler:
             
             tag_map = {
                 'KEY': 'key', 'STRING': 'string', 'PUNC': 'punc', 'COMMENT': 'comment',
-                'TSV_TAB': 'tsv_tab', 'TSV_SPACE_DELIMITER': 'tsv_space_delimiter'
+                'TSV_TAB': 'tsv_tab', 'TSV_SPACE_DELIMITER': 'tsv_space_delimiter',
+                'NUMBER': 'number', 'BOOLEAN_NULL': 'boolean_null'
             }
             if kind in tag_map:
                 widget.tag_add(tag_map[kind], start, end)
