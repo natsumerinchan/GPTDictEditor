@@ -34,11 +34,11 @@ class FindReplaceDialog(ttk.Toplevel):
         main_frame.pack(expand=True, fill=BOTH)
 
         ttk.Label(main_frame, text="查找:").grid(row=0, column=0, sticky=W, padx=5, pady=5)
-        self.find_entry = ttk.Entry(main_frame, width=40)
+        self.find_entry = ttk.Combobox(main_frame, width=40, values=self.app.find_history)
         self.find_entry.grid(row=0, column=1, columnspan=2, sticky=(W, E), padx=5, pady=5)
 
         ttk.Label(main_frame, text="替换:").grid(row=1, column=0, sticky=W, padx=5, pady=5)
-        self.replace_entry = ttk.Entry(main_frame, width=40)
+        self.replace_entry = ttk.Combobox(main_frame, width=40, values=self.app.replace_history)
         self.replace_entry.grid(row=1, column=1, columnspan=2, sticky=(W, E), padx=5, pady=5)
 
         option_frame = ttk.Frame(main_frame)
@@ -146,6 +146,11 @@ class FindReplaceDialog(ttk.Toplevel):
 
     def _perform_find(self, backwards=False):
         """执行查找操作的核心逻辑。"""
+        find_term = self.find_entry.get()
+        if find_term and find_term not in self.app.find_history:
+            self.app.find_history.insert(0, find_term)
+            self.find_entry['values'] = self.app.find_history
+            
         matches = self._find_all_matches()
         if not matches:
             messagebox.showinfo("提示", "未找到指定内容", parent=self)
@@ -190,8 +195,10 @@ class FindReplaceDialog(ttk.Toplevel):
             self.target.see(match_to_show['start'])
             # see之后立即更新，否则光标位置可能不正确
             self.target.update_idletasks() 
-            # 将光标移动到新匹配项的开头
+            # 将光标移动到新匹配项的开头，并选中它
+            self.target.tag_remove(tk.SEL, "1.0", tk.END)
             self.target.mark_set(tk.INSERT, match_to_show['start'])
+            self.target.tag_add(tk.SEL, match_to_show['start'], match_to_show['end'])
             self._highlight_all_matches(focus_index=next_match_index)
         else:
             messagebox.showinfo("提示", "未找到指定内容", parent=self)
@@ -217,6 +224,16 @@ class FindReplaceDialog(ttk.Toplevel):
 
     def replace(self):
         """替换当前选中的匹配项，并自动查找下一个。"""
+        find_term = self.find_entry.get()
+        if find_term and find_term not in self.app.find_history:
+            self.app.find_history.insert(0, find_term)
+            self.find_entry['values'] = self.app.find_history
+            
+        replace_term = self.replace_entry.get()
+        if replace_term and replace_term not in self.app.replace_history:
+            self.app.replace_history.insert(0, replace_term)
+            self.replace_entry['values'] = self.app.replace_history
+
         if not self.target.tag_ranges(tk.SEL):
             self.find_next()
             if not self.target.tag_ranges(tk.SEL):
@@ -254,10 +271,18 @@ class FindReplaceDialog(ttk.Toplevel):
     def replace_all(self):
         """替换所有匹配项。"""
         find_text = self.find_entry.get()
+        if find_text and find_text not in self.app.find_history:
+            self.app.find_history.insert(0, find_text)
+            self.find_entry['values'] = self.app.find_history
+
+        replace_text = self.replace_entry.get()
+        if replace_text and replace_text not in self.app.replace_history:
+            self.app.replace_history.insert(0, replace_text)
+            self.replace_entry['values'] = self.app.replace_history
+            
         if not find_text:
             return
         
-        replace_text = self.replace_entry.get()
         content = self.target.get('1.0', tk.END)
         case = self.case_var.get()
         regex = self.regex_var.get()

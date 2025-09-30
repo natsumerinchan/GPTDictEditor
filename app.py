@@ -52,6 +52,10 @@ class GPTDictConverter:
         self.current_file_path: Optional[str] = None
         self.last_directory: str = self.settings.get("last_directory", str(Path.home()))
         
+        # 初始化查找替换历史
+        self.find_history = []
+        self.replace_history = []
+        
         
         # 从常量中提取格式名称用于UI
         self.format_names = {k: v["name"] for k, v in FORMAT_DEFINITIONS.items()}
