@@ -4,6 +4,7 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
 from .custom_widgets import EditorWithLineNumbers
+from constants import EDITOR_STYLE
 
 class MainWindowUI:
     """负责主窗口UI的创建和布局。"""
@@ -89,13 +90,8 @@ class MainWindowUI:
         ttk.Label(main_frame, textvariable=self.app.status_var, relief=SUNKEN).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5, 0))
 
         # --- 编辑器共享样式 ---
-        editor_style = {
-            "font": ("Consolas", 10), "background": "#FFFFFF", "foreground": "#000000",
-            "insertbackground": "black", "selectbackground": "#ADD6FF", "selectforeground": "black",
-            "inactiveselectbackground": "#E5E5E5", "insertwidth": 2, "padx": 5, "pady": 5,
-        }
-        self.app.input_text.config(**editor_style)
-        self.app.output_text.config(**editor_style)
+        self.app.input_text.config(**EDITOR_STYLE)
+        self.app.output_text.config(**EDITOR_STYLE)
 
         # 从设置恢复“自动转换”复选框的状态
         self.app.auto_convert_var.set(self.app.settings.get("auto_convert", True))
