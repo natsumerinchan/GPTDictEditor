@@ -6,17 +6,7 @@
 import json
 import re
 from typing import List, Dict, Optional
-
-# 尝试导入 toml，如果失败则提供明确的错误信息
-try:
-    import toml
-except ImportError:
-    # 在模块级别抛出异常，因为这是核心功能的硬性要求
-    raise ImportError(
-        "错误：缺少 'toml' 包。\n"
-        "请在命令行运行以下命令进行安装：\n"
-        "pip install toml"
-    )
+import toml
 
 # 从项目模块导入常量
 from constants import FORMAT_DEFINITIONS

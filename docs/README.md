@@ -18,7 +18,7 @@
 ### 2、安装依赖
 
 ```cmd
-pip install toml tk tkinterdnd2 tkhtmlview markdown
+pip install -r .\requirements.txt
 ```
 
 ### 3、克隆本仓库

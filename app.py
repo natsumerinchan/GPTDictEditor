@@ -12,20 +12,9 @@ import json
 from tkinter import ttk, messagebox
 from typing import Optional
 
-# 检查和导入第三方库
-try:
-    import markdown
-    from tkhtmlview import HTMLScrolledText
-except ImportError:
-    root = tk.Tk(); root.withdraw()
-    messagebox.showerror("缺少依赖", "错误: 缺少 'tkhtmlview' 或 'markdown' 包。\n请运行: pip install tkhtmlview markdown")
-    sys.exit(1)
-try:
-    import toml
-except ImportError:
-    root = tk.Tk(); root.withdraw()
-    messagebox.showerror("缺少依赖", "错误：缺少 'toml' 包。\n请运行: pip install toml")
-    sys.exit(1)
+import markdown
+from tkhtmlview import HTMLScrolledText
+import toml
 
 
 # 从项目模块导入

@@ -4,21 +4,7 @@
 import sys
 from tkinter import messagebox, Tk
 
-# 尝试导入核心依赖，如果失败则提供明确的错误信息
-try:
-    from tkinterdnd2 import TkinterDnD
-except ImportError:
-    # 使用一个临时的Tk窗口来显示错误消息
-    root = Tk()
-    root.withdraw()
-    messagebox.showerror(
-        "缺少依赖",
-        "错误: 缺少 'tkinterdnd2' 包。\n"
-        "此包用于实现拖放文件功能。\n\n"
-        "请在命令行运行以下命令进行安装:\n"
-        "pip install tkinterdnd2"
-    )
-    sys.exit(1)
+from tkinterdnd2 import TkinterDnD
 
 # 从其他模块导入主应用程序类
 from app import GPTDictConverter
