@@ -1,4 +1,3 @@
-tk
 tkinterdnd2
 tkhtmlview
 markdown
