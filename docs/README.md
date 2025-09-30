@@ -31,10 +31,10 @@ cd .\GPTDictEditor
 ### 4、运行脚本
 
 ```cmd
-python .\GPTDictEditor.py
+python .\main.py
 ```
 
-或双击运行`GPTDictEditor.bat`
+或双击运行`run.bat`
 
 ### 5、详细使用教程
 
