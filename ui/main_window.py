@@ -69,7 +69,7 @@ class MainWindowUI:
         input_header = ttk.Frame(input_pane)
         input_header.pack(fill=X, pady=(0, 5))
         ttk.Label(input_header, text="输入内容 (可拖入文件):").pack(side=LEFT, anchor=W)
-        ttk.Button(input_header, text="复制", command=self.app.copy_input, bootstyle="secondary-outline").pack(side=LEFT, padx=10)
+        ttk.Button(input_header, text="复制", command=self.app.copy_input, bootstyle="info-outline").pack(side=LEFT, padx=10)
         self.app.input_text = EditorWithLineNumbers(input_pane, borderwidth=1, relief="solid")
         self.app.input_text.pack(expand=True, fill=BOTH)
         
@@ -77,8 +77,8 @@ class MainWindowUI:
         output_header = ttk.Frame(output_pane)
         output_header.pack(fill=X, pady=(0, 5))
         ttk.Label(output_header, text="输出内容:").pack(side=LEFT, anchor=W)
-        ttk.Button(output_header, text="复制", command=self.app.copy_output, bootstyle="secondary-outline").pack(side=LEFT, padx=10)
-        ttk.Button(output_header, text="传至输入栏", command=self.app.transfer_output_to_input, bootstyle="secondary-outline").pack(side=LEFT)
+        ttk.Button(output_header, text="复制", command=self.app.copy_output, bootstyle="info-outline").pack(side=LEFT, padx=10)
+        ttk.Button(output_header, text="传至输入栏", command=self.app.transfer_output_to_input, bootstyle="warning-outline").pack(side=LEFT)
         self.app.output_text = EditorWithLineNumbers(output_pane, state=DISABLED, borderwidth=1, relief="solid")
         self.app.output_text.pack(expand=True, fill=BOTH)
 
