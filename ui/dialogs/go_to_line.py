@@ -4,9 +4,11 @@
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from tkinter import messagebox
 
-class GoToLineDialog(tk.Toplevel):
+class GoToLineDialog(ttk.Toplevel):
     """
     一个用于跳转到指定行的 Toplevel 窗口。
     用户可以选择目标是输入框还是输出框。
@@ -39,14 +41,14 @@ class GoToLineDialog(tk.Toplevel):
     def create_widgets(self):
         """创建并布局对话框中的所有UI组件。"""
         main_frame = ttk.Frame(self, padding="10")
-        main_frame.pack(expand=True, fill=tk.BOTH)
+        main_frame.pack(expand=True, fill=BOTH)
 
         # 行号输入区域
         input_frame = ttk.Frame(main_frame)
-        input_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(input_frame, text="行号:").pack(side=tk.LEFT, padx=(0, 5))
+        input_frame.pack(fill=X, pady=5)
+        ttk.Label(input_frame, text="行号:").pack(side=LEFT, padx=(0, 5))
         self.line_entry = ttk.Entry(input_frame)
-        self.line_entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        self.line_entry.pack(side=LEFT, expand=True, fill=X)
         self.line_entry.focus_set()  # 自动聚焦到输入框
         self.line_entry.bind("<Return>", self.on_ok)  # 绑定回车键
 
@@ -55,17 +57,17 @@ class GoToLineDialog(tk.Toplevel):
         target_frame.pack(pady=5)
         self.target_var = tk.StringVar(value="input")
         ttk.Radiobutton(
-            target_frame, text="输入框", variable=self.target_var, value="input"
-        ).pack(side=tk.LEFT, padx=5)
+            target_frame, text="输入框", variable=self.target_var, value="input", bootstyle="primary"
+        ).pack(side=LEFT, padx=5)
         ttk.Radiobutton(
-            target_frame, text="输出框", variable=self.target_var, value="output"
-        ).pack(side=tk.LEFT, padx=5)
+            target_frame, text="输出框", variable=self.target_var, value="output", bootstyle="primary"
+        ).pack(side=LEFT, padx=5)
 
         # 操作按钮
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(pady=10)
-        ttk.Button(btn_frame, text="确定", command=self.on_ok).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="取消", command=self.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="确定", command=self.on_ok, bootstyle="primary").pack(side=LEFT, padx=5)
+        ttk.Button(btn_frame, text="取消", command=self.destroy, bootstyle="secondary").pack(side=LEFT, padx=5)
 
     def on_ok(self, event=None):
         """
@@ -94,9 +96,9 @@ class GoToLineDialog(tk.Toplevel):
 
         # 特殊处理：如果目标控件被禁用（如输出框），需先启用再操作
         # 注意：状态操作必须指向内部的 .text 组件
-        was_disabled = (target_widget.text.cget("state") == tk.DISABLED)
+        was_disabled = (target_widget.text.cget("state") == DISABLED)
         if was_disabled:
-            target_widget.text.config(state=tk.NORMAL)
+            target_widget.text.config(state=NORMAL)
 
         # 移除之前可能存在的所有行高亮
         for widget in [self.app.input_text, self.app.output_text]:

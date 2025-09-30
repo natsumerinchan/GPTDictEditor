@@ -5,9 +5,11 @@
 
 import re
 import tkinter as tk
-from tkinter import ttk, messagebox
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from tkinter import messagebox
 
-class FindReplaceDialog(tk.Toplevel):
+class FindReplaceDialog(ttk.Toplevel):
     """
     一个用于查找和替换文本的 Toplevel 窗口。
     它可以在目标文本控件中高亮所有匹配项，并执行替换操作，
@@ -29,32 +31,32 @@ class FindReplaceDialog(tk.Toplevel):
     def create_widgets(self):
         """创建并布局对话框中的所有UI组件。"""
         main_frame = ttk.Frame(self, padding="10")
-        main_frame.pack(expand=True, fill=tk.BOTH)
+        main_frame.pack(expand=True, fill=BOTH)
 
-        ttk.Label(main_frame, text="查找:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(main_frame, text="查找:").grid(row=0, column=0, sticky=W, padx=5, pady=5)
         self.find_entry = ttk.Entry(main_frame, width=40)
-        self.find_entry.grid(row=0, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=5)
+        self.find_entry.grid(row=0, column=1, columnspan=2, sticky=(W, E), padx=5, pady=5)
 
-        ttk.Label(main_frame, text="替换:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(main_frame, text="替换:").grid(row=1, column=0, sticky=W, padx=5, pady=5)
         self.replace_entry = ttk.Entry(main_frame, width=40)
-        self.replace_entry.grid(row=1, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=5)
+        self.replace_entry.grid(row=1, column=1, columnspan=2, sticky=(W, E), padx=5, pady=5)
 
         option_frame = ttk.Frame(main_frame)
-        option_frame.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=5)
+        option_frame.grid(row=2, column=0, columnspan=3, sticky=W, pady=5)
         self.case_var = tk.BooleanVar()
-        ttk.Checkbutton(option_frame, text="区分大小写", variable=self.case_var).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(option_frame, text="区分大小写", variable=self.case_var, bootstyle="primary").pack(side=LEFT, padx=5)
         self.regex_var = tk.BooleanVar()
-        ttk.Checkbutton(option_frame, text="正则表达式", variable=self.regex_var).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(option_frame, text="正则表达式", variable=self.regex_var, bootstyle="primary").pack(side=LEFT, padx=5)
 
         self.status_label = ttk.Label(main_frame, text="")
-        self.status_label.grid(row=3, column=0, columnspan=3, sticky=tk.W, padx=5, pady=2)
+        self.status_label.grid(row=3, column=0, columnspan=3, sticky=W, padx=5, pady=2)
 
         btn_frame = ttk.Frame(main_frame)
         btn_frame.grid(row=4, column=0, columnspan=3, pady=10)
-        ttk.Button(btn_frame, text="查找上一个", command=self.find_previous).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="查找下一个", command=self.find_next).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="替换", command=self.replace).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="替换全部", command=self.replace_all).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="查找上一个", command=self.find_previous, bootstyle="secondary").pack(side=LEFT, padx=5)
+        ttk.Button(btn_frame, text="查找下一个", command=self.find_next, bootstyle="secondary").pack(side=LEFT, padx=5)
+        ttk.Button(btn_frame, text="替换", command=self.replace, bootstyle="primary").pack(side=LEFT, padx=5)
+        ttk.Button(btn_frame, text="替换全部", command=self.replace_all, bootstyle="danger").pack(side=LEFT, padx=5)
 
         self.find_entry.bind('<KeyRelease>', lambda e: self._highlight_all_matches())
         self.case_var.trace_add('write', lambda *a: self._highlight_all_matches())

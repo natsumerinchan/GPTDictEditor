@@ -4,7 +4,8 @@
 """
 
 import tkinter as tk
-from tkinter import ttk
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 
 class EditorWithLineNumbers(tk.Frame):
     """
@@ -32,15 +33,15 @@ class EditorWithLineNumbers(tk.Frame):
         self.linenumbers.grid(row=0, column=0, sticky="ns")
 
         # 创建垂直滚动条
-        self.vbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.yview)
+        self.vbar = ttk.Scrollbar(self, orient=VERTICAL, command=self.yview)
         self.vbar.grid(row=0, column=2, sticky="ns")
         
         # 创建水平滚动条
-        self.hbar = ttk.Scrollbar(self, orient=tk.HORIZONTAL)
+        self.hbar = ttk.Scrollbar(self, orient=HORIZONTAL)
         self.hbar.grid(row=1, column=1, sticky="ew")
 
         # 创建核心文本控件
-        self.text = tk.Text(self, undo=True, wrap=tk.NONE, *args, **kwargs)
+        self.text = tk.Text(self, undo=True, wrap=NONE, *args, **kwargs)
         self.text.grid(row=0, column=1, sticky="nsew")
         
         # 将滚动条与文本控件关联

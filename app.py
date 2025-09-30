@@ -5,11 +5,12 @@
 # 标准库导入
 import os
 import sys
-import tkinter as tk
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 import tkinter.font as tkFont
 import webbrowser
 import json
-from tkinter import ttk, messagebox
+from tkinter import messagebox
 from typing import Optional
 
 import markdown
@@ -35,7 +36,7 @@ class GPTDictConverter:
     GPT字典编辑转换器的主应用程序类。
     负责UI的创建、事件处理和模块协调。
     """
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: ttk.Window):
         self.root = root
         self.root.title(f"GPT字典编辑转换器   {APP_VERSION}")
         

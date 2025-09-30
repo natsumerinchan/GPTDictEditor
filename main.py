@@ -2,8 +2,8 @@
 # 1. 依赖检查与导入
 # #####################################################################
 import sys
-from tkinter import messagebox, Tk
-
+import ttkbootstrap as ttk
+from tkinter import messagebox
 from tkinterdnd2 import TkinterDnD
 
 # 从其他模块导入主应用程序类
@@ -24,6 +24,7 @@ def main():
         root = TkinterDnD.Tk()
         
         # 实例化主应用程序
+        style = ttk.Style()
         app = GPTDictConverter(root)
         
         # 启动UI事件循环
