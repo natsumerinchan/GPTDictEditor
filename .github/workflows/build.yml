@@ -22,12 +22,16 @@ jobs:
       
     - name: Install dependencies
       run: |
+        python -m venv venv
+        .\venv\Scripts\activate
         python -m pip install --upgrade pip
         pip install -r .\requirements.txt
         pip install pyinstaller
+        copy .\.github\bin\* .\venv\Scripts
 
     - name: Build GPTDictEditor
       run: |
+        .\venv\Scripts\activate
         pyinstaller --noconfirm --onefile --windowed --add-data "docs/help.md;docs" --name "GPTDictEditor" main.py
     
     - name: Upload GPTDictEditor

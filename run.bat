@@ -1,2 +1,2 @@
 @chcp 65001
-python .\main.py
+.\venv\Scripts\activate && python .\main.py

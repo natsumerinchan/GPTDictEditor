@@ -15,17 +15,33 @@
 - **版本控制工具**: [git](https://git-scm.com/)
 - [python 3.13.7](https://www.python.org/downloads/release/python-3137/) ：不保证其它python版本能否正常运行
 
-### 2、安装依赖
 
-```cmd
-pip install -r .\requirements.txt
-```
 
-### 3、克隆本仓库
+### 2、克隆本仓库
 
 ```cmd
 git clone https://github.com/natsumerinchan/GPTDictEditor.git
 cd .\GPTDictEditor
+```
+
+### 3、安装依赖
+
+#### 3.1 创建虚拟环境
+
+```cmd
+python -m venv venv
+```
+
+#### 3.2 激活虚拟环境
+
+```cmd
+.\venv\Scripts\activate
+```
+
+#### 3.3 安装依赖
+
+```cmd
+pip install -r .\requirements.txt
 ```
 
 ### 4、运行脚本
@@ -38,9 +54,26 @@ python .\main.py
 
 ### 5、打包为exe（可选）
 
+#### 5.1 激活虚拟环境
+
+```cmd
+.\venv\Scripts\activate
+```
+
+#### 5.2 安装pyinstaller
+
 ```cmd
 pip install pyinstaller
+```
 
+#### 5.3 配置upx(用于压缩exe体积)
+
+下载[upx](https://github.com/upx/upx/releases)的win64版并将`upx.exe`和`upx.1`复制到  
+`venv\Scripts`文件夹（直接在.\github\bin复制亦可）
+
+#### 5.4 开始打包
+
+```cmd
 pyinstaller --noconfirm --onefile --windowed --add-data "docs/help.md;docs" --name "GPTDictEditor" main.py
 ```
 
