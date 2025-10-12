@@ -97,38 +97,29 @@ pyinstaller --noconfirm --onefile --windowed --add-data "docs/help.md;docs" --na
 
 ### [julixian/GalTranslPP](https://github.com/julixian/GalTranslPP.git)
 
-#### GPPGUI_TOML
+#### GPPV2_TOML_SHORT
 
 ```toml
 gptDict = [
-	{ org = '原文1', rep = '译文1', note = '注释1' },
-	{ org = '原文2', rep = '译文2', note = '注释2' },
-	{ org = '原文3', rep = '译文3', note = '注释3' },
+	{org = "原文1", rep = "译文1", note = "注释1"},
+	{org = "原文2", rep = "译文2", note = "注释2"},
+	{org = "原文3", rep = "译文3", note = "注释3"},
 ]
 ```
 
-#### GPPCLI_TOML
+#### GPPV2_TOML_FULL
 
 ```toml
-[[gptDict]]
-note = '注释1'
-replaceStr = '译文1'
-searchStr = '原文1'
-
-[[gptDict]]
-note = '注释2'
-replaceStr = '译文2'
-searchStr = '原文2'
-
-[[gptDict]]
-note = '注释3'
-replaceStr = '译文3'
-searchStr = '原文3'
+gptDict = [
+	{searchStr = "原文1", replaceStr = "译文1", note = "注释1"},
+	{searchStr = "原文2", replaceStr = "译文2", note = "注释2"},
+	{searchStr = "原文3", replaceStr = "译文3", note = "注释3"},
+]
 ```
 
 ### [NEKOparapa/AiNiee](https://github.com/NEKOparapa/AiNiee.git) 和 [neavo/LinguaGacha](https://github.com/neavo/LinguaGacha.git)
 
-#### AiNiee_JSON
+#### KeywordGacha_JSON
 
 ```json
 [

@@ -42,7 +42,7 @@ class MainWindowUI:
         # --- 输出格式 ---
         ttk.Label(format_frame, text="输出格式:").pack(anchor=W, pady=(5, 0))
         self.app.output_format = ttk.Combobox(format_frame, values=list(self.app.format_names.values()), state="readonly", width=25)
-        self.app.output_format.set(self.app.format_names["GPPGUI_TOML"])
+        self.app.output_format.set(self.app.format_names["GPPV2_TOML_SHORT"])
         self.app.output_format.pack(pady=2)
         self.app.output_format.bind("<<ComboboxSelected>>", self.app.auto_convert)
 

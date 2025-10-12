@@ -24,7 +24,7 @@ def get_format_key(name: str, display_name: bool = False) -> Optional[str]:
         display_name: 如果为True，则表示 'name' 是一个显示名称。
 
     Returns:
-        如果找到，则返回格式的内部键名 (如 "GPPGUI_TOML")，否则返回None。
+        如果找到，则返回格式的内部键名 (如 "GalTranslPP_V2_TOML")，否则返回None。
     """
     if display_name:
         for key, value in FORMAT_DEFINITIONS.items():
@@ -52,10 +52,13 @@ def detect_format(content: str) -> Optional[str]:
     # 检查 TOML 特有的关键字和结构
     if 'gptDict' in content or '[[gptDict]]' in content or content.startswith('gptDict'):
         try:
-            toml.loads(content)
-            if '[[gptDict]]' in content:
-                return FORMAT_DEFINITIONS["GPPCLI_TOML"]["name"]
-            return FORMAT_DEFINITIONS["GPPGUI_TOML"]["name"]
+            toml_data = toml.loads(content)
+            # 检查是完整格式还是缩写格式
+            if 'gptDict' in toml_data and toml_data['gptDict']:
+                first_item = toml_data['gptDict'][0]
+                if 'searchStr' in first_item or 'replaceStr' in first_item:
+                    return FORMAT_DEFINITIONS["GPPV2_TOML_FULL"]["name"]
+            return FORMAT_DEFINITIONS["GPPV2_TOML_SHORT"]["name"]
         except toml.TomlDecodeError:
             # 即使关键字匹配，如果解析失败，也不将其识别为 TOML
             pass
@@ -80,7 +83,7 @@ def detect_format(content: str) -> Optional[str]:
         try:
             data = json.loads(content)
             if isinstance(data, list) and data and all(k in data[0] for k in ['src', 'dst']):
-                return FORMAT_DEFINITIONS["AiNiee_JSON"]["name"]
+                return FORMAT_DEFINITIONS["KeywordGacha_JSON"]["name"]
         except json.JSONDecodeError:
             pass
             
@@ -92,7 +95,7 @@ def parse_input(content: str, format_key: str) -> DictData:
 
     Args:
         content: 输入的文本内容。
-        format_key: 内容的格式键名 (如 "GPPGUI_TOML")。
+        format_key: 内容的格式键名 (如 "GalTranslPP_V2_TOML")。
 
     Returns:
         一个包含字典条目的列表。
@@ -107,18 +110,17 @@ def parse_input(content: str, format_key: str) -> DictData:
     if not content.strip():
         return []
 
-    if format_key == "AiNiee_JSON":
+    if format_key == "KeywordGacha_JSON":
         json_data = json.loads(content)
         for item in json_data:
             data.append({'org': item.get('src', ''), 'rep': item.get('dst', ''), 'note': item.get('info', '')})
-    elif format_key == "GPPGUI_TOML":
+    elif format_key in ["GPPV2_TOML_SHORT", "GPPV2_TOML_FULL"]:
         toml_data = toml.loads(content)
         for item in toml_data.get('gptDict', []):
-            data.append({'org': item.get('org', ''), 'rep': item.get('rep', ''), 'note': item.get('note', '')})
-    elif format_key == "GPPCLI_TOML":
-        toml_data = toml.loads(content)
-        for item in toml_data.get('gptDict', []):
-            data.append({'org': item.get('searchStr', ''), 'rep': item.get('replaceStr', ''), 'note': item.get('note', '')})
+            org = item.get('org', item.get('searchStr', ''))
+            rep = item.get('rep', item.get('replaceStr', ''))
+            note = item.get('note', '')
+            data.append({'org': org, 'rep': rep, 'note': note})
     elif format_key == "GalTransl_TSV":
         for line in content.splitlines():
             line = line.strip()
@@ -155,28 +157,23 @@ def format_output(data: DictData, format_key: str) -> str:
     # TOML中单引号需要转义
     escape = lambda text: text.replace("'", "''")
 
-    if format_key == "AiNiee_JSON":
+    if format_key == "KeywordGacha_JSON":
         json_data = [{'src': item['org'], 'dst': item['rep'], 'info': item['note']} for item in data]
         return json.dumps(json_data, ensure_ascii=False, indent=2)
     
-    elif format_key == "GPPGUI_TOML":
+    elif format_key == "GPPV2_TOML_SHORT":
         lines = ["gptDict = ["]
         for item in data:
-            lines.append(f"\t{{ org = '{escape(item['org'])}', rep = '{escape(item['rep'])}', note = '{escape(item['note'])}' }},")
+            lines.append(f"    {{org = \"{escape(item['org'])}\", rep = \"{escape(item['rep'])}\", note = \"{escape(item['note'])}\"}},")
         lines.append("]")
         return "\n".join(lines)
-        
-    elif format_key == "GPPCLI_TOML":
-        entries = []
+
+    elif format_key == "GPPV2_TOML_FULL":
+        lines = ["gptDict = ["]
         for item in data:
-            entry_str = (
-                f"[[gptDict]]\n"
-                f"note = '{escape(item['note'])}'\n"
-                f"replaceStr = '{escape(item['rep'])}'\n"
-                f"searchStr = '{escape(item['org'])}'"
-            )
-            entries.append(entry_str)
-        return "\n\n".join(entries)
+            lines.append(f"    {{searchStr = \"{escape(item['org'])}\", replaceStr = \"{escape(item['rep'])}\", note = \"{escape(item['note'])}\"}},")
+        lines.append("]")
+        return "\n".join(lines)
         
     elif format_key == "GalTransl_TSV":
         lines = []

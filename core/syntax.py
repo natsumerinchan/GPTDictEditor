@@ -146,10 +146,9 @@ class SyntaxHandler:
                 ('BOOLEAN_NULL', r'\b(true|false|null)\b'),
                 ('PUNC', r'[\[\]{},=:]'),
             ],
-            'GPPGUI_TOML': [('KEY', r'\b(org|rep|note)\b(?=\s*=)')],
-            'GPPCLI_TOML': [('KEY', r'\b(note|replaceStr|searchStr)\b(?=\s*=)')],
+            'GalTranslPP_V2_TOML': [('KEY', r'\b(org|rep|note|searchStr|replaceStr)\b(?=\s*=)')],
             # 匹配 JSON 中所有在冒号前的键
-            'AiNiee_JSON': [('KEY', r'"([^"\\]*(?:\\.[^"\\]*)*)"(?=\s*:)')],
+            'KeywordGacha_JSON': [('KEY', r'"([^"\\]*(?:\\.[^"\\]*)*)"(?=\s*:)')],
             'GalTransl_TSV': [
                 ('COMMENT', r'//.*$'),
                 ('TSV_TAB', r'\t'),
@@ -217,7 +216,7 @@ class SyntaxHandler:
         format_key = self._get_active_format_key(widget)
         
         # 确定不同格式的注释符号
-        comment_char_map = {"GPPGUI_TOML": "#", "GPPCLI_TOML": "#", "GalTransl_TSV": "//"}
+        comment_char_map = {"GalTranslPP_V2_TOML": "#", "GalTransl_TSV": "//"}
         comment_char = comment_char_map.get(format_key)
         
         if not comment_char: return "break"

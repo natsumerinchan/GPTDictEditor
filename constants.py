@@ -8,7 +8,7 @@
 # #####################################################################
 
 # 应用程序的版本号
-APP_VERSION = "v1.3.3"
+APP_VERSION = "v2.0.0"
 
 
 # #####################################################################
@@ -43,16 +43,16 @@ EDITOR_STYLE = {
 # 统一管理所有支持的字典格式定义
 # 每个格式都包含一个用户友好的名称和一个默认文件扩展名
 FORMAT_DEFINITIONS = {
-    "AiNiee_JSON": {
+    "KeywordGacha_JSON": {
         "name": "AiNiee/LinguaGacha JSON格式",
         "ext": ".json"
     },
-    "GPPGUI_TOML": {
-        "name": "GalTranslPP GUI TOML格式",
+    "GPPV2_TOML_SHORT": {
+        "name": "GalTranslPP V2 TOML (简写)",
         "ext": ".toml"
     },
-    "GPPCLI_TOML": {
-        "name": "GalTranslPP CLI TOML格式",
+    "GPPV2_TOML_FULL": {
+        "name": "GalTranslPP V2 TOML (完整)",
         "ext": ".toml"
     },
     "GalTransl_TSV": {
