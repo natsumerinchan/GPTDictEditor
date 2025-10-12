@@ -85,6 +85,5 @@
 ## 四、支持的格式说明
 
 - **`AiNiee/LinguaGacha JSON`**: JSON 数组格式，每个对象包含 `src` (原文), `dst` (译文), `info` (备注) 键。
-- **`GalTranslPP GUI TOML`**: TOML 格式，包含一个名为 `gptDict` 的表数组，每个表包含 `org`, `rep`, `note` 键。
-- **`GalTranslPP CLI TOML`**: TOML 格式，每个条目由独立的 `[[gptDict]]` 表定义，包含 `searchStr`, `replaceStr`, `note` 键。
+- **`GalTranslPP V2 TOML`**: TOML 格式，包含一个名为 `gptDict` 的表数组，每个表包含 `org`, `rep`, `note` 键（简写）或`searchStr`, `replaceStr`, `note` 键（完整）。
 - **`GalTransl TSV`**: 纯文本格式，使用制表符 (Tab) 或四个空格分隔。以 `//` 开头的行为注释。
